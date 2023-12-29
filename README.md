@@ -13,7 +13,7 @@
 ## [Project page](https://free-editor.github.io/) | [Paper](https://arxiv.org/abs/2312.13663) 
 
 
-<img src="assets/teaser_final.jpg"/>
+<img src="assets/Top_teaser.png"/>
 
 ## 😮 Highlights
 
@@ -39,19 +39,19 @@ Welcome to **watch** 👀 this repository for the latest updates.
 
 ## 🛠️ Methodology
 
-<img src="assets/main_fig.jpg"/>
-Overall pipeline of LatentEditor for model initialization and editing. (a) We initialize the NeRF model within the latent domain, guided by the latent features of the original dataset. Our refinement adapter mitigates the misalignment in the latent space and encompasses a trainable adapter with residual and self-attention mechanisms. (b) Upon initialization, LatentEditor iteratively refines the model within the latent space for a predetermined number of iterations, while consistently updating the training set with the edited latents, Ze. (c) The Delta Module is adept at interpreting prompts and produces the mask for targeted editing. Additionally, it integrates the denoising U-Net from IP2P. However, ∆t used in calculating delta scores ∆e is a hyperparameter and is different from t which is randomly selected. An RGB image can be obtained by feeding the edited latent to the stable diffusion (SD) decoder D whereas E represents SD encoder.
+<img src="assets/Main_teaser.png"/>
+Overview of our proposed method. We train a generalized NeRF (G(.)) that takes a single edited starting view and M source views to render a novel target view. Here, ”Edited Target View” is not the input to the model rather will be rendered and works as the ground truth for the prediction of G(.). In G(.) we employ a special Edit Transformer that utilizes: cross-attention to produce style-informed source feature maps that will be aggregated through an Epipolar Transformer. At inference, we can synthesize novel edited views in a zero-shot manner. To edit a scene, we take only a single image as the starting view and edit it using a Text-to-Image (T2I) diffusion model. Based on this starting view, we can render novel edited target views.
 
 ## 🚀 3D-Editing Results
 
 ### Qualitative comparison
 
-<img src="assets/compare_qual.jpg"/>
+<img src="assets/Comparison.png"/>
 
 ### Quantitative comparison
 
-<img src="assets/compare_quan.png"/>
-Quantitative evaluation of scene edits in terms of text alignment and frame consistency in CLIP space where our approach demonstrates the highest consistency.
+<img src="assets/quant.png"/>
+Quantitative evaluation of scene edits in terms of Edit PSNR, CLIP Text-Image Directional Similarity (CTDS) and CLIP directional consistency (CDS).
 
 ## 👍 **Acknowledgement**
 This work is built on many amazing research works and open-source projects, thanks a lot to all the authors for sharing!
@@ -60,14 +60,14 @@ This work is built on many amazing research works and open-source projects, than
 * [Diffusers](https://github.com/huggingface/diffusers)
 
 ## ✏️ Citation
-If you find our paper and code useful in your research, please consider giving a star :star: and citation :pencil:.
+If you find our paper and code useful in your research, please consider giving a star :star: and a citation :pencil:.
 
 ```BibTeX
-@misc{khalid2023latenteditor,
-      title={LatentEditor: Text Driven Local Editing of 3D Scenes}, 
-      author={Umar Khalid and Hasan Iqbal and Nazmul Karim and Jing Hua and Chen Chen},
+@misc{karim2023freeeditor,
+      title={Free-Editor: Zero-shot Text-driven 3D Scene Editing}, 
+      author={Nazmul Karim and Umar Khalid and Hasan Iqbal and Jing Hua and Chen Chen},
       year={2023},
-      eprint={2312.09313},
+      eprint={2312.13663},
       archivePrefix={arXiv},
       primaryClass={cs.CV}
 }
