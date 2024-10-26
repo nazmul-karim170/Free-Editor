@@ -85,22 +85,21 @@ def edit_image_with_prompt(pipe, original_image, prompt, num_inference_steps=50,
 
 
 ### GPT4-based Editing Prompt Generation
-openai.api_key = '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'  # Replace with your OpenAI API key
 
-def generate_prompts_gpt(caption, num_prompts=20):
-    prompts = []
-    for _ in range(num_prompts):
-        response = openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=f"Generate a creative and diverse prompt for editing an image based on the following caption:\n\nCaption: {caption}\n\nPrompt:",
-            max_tokens=50,
-            n=1,
-            stop=None,
-            temperature=0.7,
-        )
-        prompt = response.choices[0].text.strip()
-        prompts.append(prompt)
-    return prompts
+# def generate_prompts_gpt(caption, num_prompts=20):
+#     prompts = []
+#     for _ in range(num_prompts):
+#         response = openai.Completion.create(
+#             engine="text-davinci-003",
+#             prompt=f"Generate a creative and diverse prompt for editing an image based on the following caption:\n\nCaption: {caption}\n\nPrompt:",
+#             max_tokens=50,
+#             n=1,
+#             stop=None,
+#             temperature=0.7,
+#         )
+#         prompt = response.choices[0].text.strip()
+#         prompts.append(prompt)
+#     return prompts
 
 def torch_to_pil(image: torch.Tensor) -> Image.Image:
     image = 255.0 * rearrange(image.cpu().numpy(), "c h w -> h w c")
