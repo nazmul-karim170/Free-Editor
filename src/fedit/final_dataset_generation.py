@@ -13,6 +13,8 @@ from omegaconf import OmegaConf
 from PIL import Image
 from pytorch_lightning import seed_everything
 from tqdm import tqdm
+import gc
+import torchvision.transforms as transforms
 
 # sys.path.append("./")
 # sys.path.append("./stable_diffusion")
@@ -21,12 +23,13 @@ from tqdm import tqdm
 # from ldm.util import instantiate_from_config
 from data_loaders.metrics.clip_similarity import ClipSimilarity
 from PIL import Image
-from transformers import Blip2Processor, Blip2ForConditionalGeneration
-from diffusers import StableDiffusionPipeline, UniPCMultistepScheduler
-# from create_training_dataset import create_training_dataset
-from data_loaders import dataset_dict
+from transformers import BlipProcessor, BlipForConditionalGeneration
+from diffusers import DiffusionPipeline, StableDiffusionPipeline, StableDiffusionImg2ImgPipeline, StableDiffusion3Pipeline, UniPCMultistepScheduler
+from data_loaders import dataset_dict         # from create_training_dataset import create_training_dataset
 import config_data_generation
 import openai
+from diffusers import StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
+
 
 
 ################################################################################
@@ -48,21 +51,24 @@ def to_d(x, sigma, denoised):
     return (x - denoised) / append_dims(sigma, x.ndim)
 
 
+
+            ### Edit with Stable Diffusion if you have enough GPU resources ##
+            ##################################################################
 def initialize_stable_diffusion(model_name="stable_diffusion/stable-diffusion-3-medium", device='cuda'):
     
-    ## Load the Stable Diffusion pipeline
-    pipe = StableDiffusionPipeline.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16 if device == 'cuda' else torch.float32,
-    )
-    
+    ## Load the Stable Diffusion pipeline  
+    # pipe = StableDiffusion3Pipeline.from_pretrained("stabilityai/stable-diffusion-3-medium-diffusers", torch_dtype=torch.float16)  ## It does not support text-to-image editing yet
+    pipe = DiffusionPipeline.from_pretrained("stable-diffusion-v1-5/stable-diffusion-v1-5", custom_pipeline="stable_diffusion_mega", torch_dtype=torch.float16, variant="fp16")
+
     ## Use the UniPC Scheduler for Faster Inference (optional)
     pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
     
     pipe = pipe.to(device)
+    pipe.enable_attention_slicing()
+
     return pipe
 
-def edit_image_with_prompt(pipe, original_image, prompt, num_inference_steps=50, guidance_scale=7.5, device='cuda'):
+def edit_image_with_prompt(pipe, original_image, prompt, num_inference_steps=30, guidance_scale=7.5, device='cuda'):
     """
     Edits an image based on the provided prompt using Stable Diffusion.
 
@@ -79,89 +85,57 @@ def edit_image_with_prompt(pipe, original_image, prompt, num_inference_steps=50,
     """
     ## Convert the original image to a tensor
     ## Stable Diffusion expects images as PIL Images
-    edited_image = pipe(prompt=prompt, init_image=original_image, strength=0.8, num_inference_steps=num_inference_steps, guidance_scale=guidance_scale).images[0]
+    edited_image = pipe.img2img(prompt=prompt, image=original_image, strength=0.8, num_inference_steps=num_inference_steps, guidance_scale=guidance_scale).images[0]
     
     return edited_image
 
 
-### GPT4-based Editing Prompt Generation
+    ## If there are not enough GPU resources, Use IP2P model ##
+    ###########################################################
+def IP2P_intitialization(model_id = "timbrooks/instruct-pix2pix", device = 'cuda'):
+    pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(model_id, torch_dtype=torch.float16, safety_checker=None)
+    pipe.to(device)
+    pipe.enable_xformers_memory_efficient_attention()  ## For Faster Calucations
+    pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(pipe.scheduler.config)
+    return pipe
 
-# def generate_prompts_gpt(caption, num_prompts=20):
-#     prompts = []
-#     for _ in range(num_prompts):
-#         response = openai.Completion.create(
-#             engine="text-davinci-003",
-#             prompt=f"Generate a creative and diverse prompt for editing an image based on the following caption:\n\nCaption: {caption}\n\nPrompt:",
-#             max_tokens=50,
-#             n=1,
-#             stop=None,
-#             temperature=0.7,
-#         )
-#         prompt = response.choices[0].text.strip()
-#         prompts.append(prompt)
-#     return prompts
+def Edit_with_IP2P(pipe, image, prompt, num_inference_steps=50, guidance_scale=7.5, image_guidance_scale=1.5):
+    # `image` is an RGB PIL.Image
+    print("Started Editing....")
+    images = pipe(prompt = prompt, image=image, num_inference_steps=num_inference_steps, guidance_scale=guidance_scale, image_guidance_scale=image_guidance_scale).images
+    print("Editing Complete")
+    return images[0]
+
 
 def torch_to_pil(image: torch.Tensor) -> Image.Image:
     image = 255.0 * rearrange(image.cpu().numpy(), "c h w -> h w c")
     image = Image.fromarray(image.astype(np.uint8))
     return image
 
+def pil_to_torch(image):
+    transform = transforms.ToTensor()
+    tensor_image = transform(image)
+    return tensor_image.unsqueeze(0).to("cuda")
 
 def main():
     parser = argparse.ArgumentParser()
-    # parser.add_argument(
-    #     "--out_dir",
-    #     type=str,
-    #     required=True,
-    #     help="Path to output dataset directory.",
-    # )
-    # parser.add_argument(
-    #     "--prompts_file",
-    #     type=str,
-    #     required=True,
-    #     help="Path to prompts .jsonl file.",
-    # )
-    parser.add_argument(
-        "--ckpt",
-        type=str,
-        default="stable_diffusion/models/ldm/stable-diffusion-v1/v1-5-pruned-emaonly.ckpt",
-        help="Path to stable diffusion checkpoint.",
-    )
-    parser.add_argument(
-        "--vae-ckpt",
-        type=str,
-        default="stable_diffusion/models/ldm/stable-diffusion-v1/vae-ft-mse-840000-ema-pruned.ckpt",
-        help="Path to vae checkpoint.",
-    )
     parser.add_argument(
         "--steps",
         type=int,
-        default=100,
-        help="Number of sampling steps.",
+        default=50,
+        help="Number of DDIM sampling steps.",
     )
     parser.add_argument(
         "--n-samples",
         type=int,
-        default=50,
+        default=1,
         help="Number of samples to generate per prompt (before CLIP filtering).",
     )
     parser.add_argument(
         "--max-out-samples",
         type=int,
-        default=2,
-        help="Max number of output samples to save per prompt (after CLIP filtering).",
-    )
-    parser.add_argument(
-        "--n-partitions",
-        type=int,
         default=1,
-        help="Number of total partitions.",
-    )
-    parser.add_argument(
-        "--partition",
-        type=int,
-        default=0,
-        help="Partition index.",
+        help="Max number of output samples to save per prompt (after CLIP filtering).",
     )
     parser.add_argument(
         "--min-p2p",
@@ -184,25 +158,25 @@ def main():
     parser.add_argument(
         "--max-cfg",
         type=float,
-        default=15,
+        default=11,
         help="Max classifier free guidance scale.",
     )
     parser.add_argument(
         "--clip-threshold",
         type=float,
-        default=0.5,
+        default=0.3,
         help="CLIP threshold for text-image similarity of each image.",
     )
     parser.add_argument(
         "--clip-dir-threshold",
         type=float,
-        default=0.2,
+        default=0.1,
         help="Directional CLIP threshold for similarity of change between pairs of text and pairs of images.",
     )
     parser.add_argument(
         "--clip-img-threshold",
         type=float,
-        default=0.7,
+        default=0.3,
         help="CLIP threshold for image-image similarity.",
     )
     opt = parser.parse_args()
@@ -211,17 +185,22 @@ def main():
     print(f"Global seed: {global_seed}")
     seed_everything(global_seed)
 
+    ## For Metrics 
     clip_similarity = ClipSimilarity().cuda()
 
-    # out_dir = Path(opt.out_dir)
-    # out_dir.mkdir(exist_ok=True, parents=True)
+                ## Initialize Models###
+                #######################
+    ## Caption Model
+    model_name_caption = "Salesforce/blip-image-captioning-base" 
+    processor = BlipProcessor.from_pretrained(model_name_caption)
+    processor.image_processor.do_rescale = False                                          ## Ensure rescaling is disabled if input images are already normalized
+    cap_model = BlipForConditionalGeneration.from_pretrained(model_name_caption).to("cuda:0")
 
-    ## BLIP Captioning Model ##
-    processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-    model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b").to("cuda")
+    # ## Load the Stable Diffusion Model
+    SD_pipe = initialize_stable_diffusion(device="cuda:1")
 
-    ## Stable Diffusion Model 
-    SD_pipe = initialize_stable_diffusion()
+    # ## Load the IP2P model (if enough GPU resources are not available)
+    # IP2P_pipe = IP2P_intitialization(device="cuda:1")
 
     ## List All the Dataset Classes and Go through all of them one by one 
     parser = config_data_generation.config_parser()
@@ -231,10 +210,8 @@ def main():
 
             ### Generate the Editing Prompts (Update these) ###
     painting_styles = ["Baroque","Realism","Impressionism","Op Art","Fauvism","Tonalism","Ashcan School","Rococo","Symbolism","Outsider Art"]
-    painters_style  = ["Leonardo da Vinci", "Vincent van Gogh", "Sam Francis","Max Ernst", "Henri Matisse", "Eva Hesse", "Carl Andre", "Cy Twombly"]
+    painters_style  = ["Leonardo da Vinci", "Vincent van Gogh", "Sam Francis","Max Ernst", "Henri Matisse", "Eva Hesse", "Carl Andre", "Cy Twombly", "watercolor painting"]
     color           = ["pink", "red", "orange", "white","purple","green","blue", "silver", "gold", 'bronze']
-    # remove_parts  = []
-    # add parts     = []
     
     total_edits = 5
     number_of_edits = 20 
@@ -255,7 +232,7 @@ def main():
             scene_dir  = os.path.join(dataset_dir, scene)
 
             ## Get the Dataloader (We have to go through scene by scene)
-            train_dataset = dataset_dict[dataset](
+            train_dataset = dataset_dict["nerf_synth_generation"](
                 args,
                 mode,
                 scenes=scene,
@@ -269,57 +246,58 @@ def main():
                 shuffle=True,               ## We want the selected images to be diverse 
             )
 
-            # starting_view_files = []
-            # target_view_files = []
-            # nearest_ids_list  = []
-            # CLIP_text_image_sim = []
-            # CLIP_image_sim  = []
-
             ## We will apply multiple edits to each scene
             for index_ed in range(number_of_edits):
 
-                ### Go through only 15 images, not all images of a scene
+                ### Go through only 15 views, not all images of a scene
                 num_starting_view = 15
                 for b_id, batch in enumerate(train_loader):
 
-                    caption_rgb = batch["caption_rgb"]
-                    inputs = processor(caption_rgb, return_tensors="pt").to("cuda")                       ## Put the Image into GPU
-                    out    = model.generate(**inputs)                                                     ## Get the Prediction
-                    generated_cap = processor.batch_decode(out, skip_special_tokens=True)[0].strip()      ## Generate the Caption
+                    ## BLIP Captioning Model
+                    with torch.no_grad():
+                        caption_rgb = batch["caption_rgb"]
+                        inputs = processor(caption_rgb, return_tensors="pt").to("cuda:0")                       ## Put the Image into GPU
+                        out    = cap_model.generate(**inputs)                                                   ## Get the Prediction
+                        # generated_cap = processor.batch_decode(out, skip_special_tokens=True)[0].strip()      ## Generate the Caption
+                        generated_cap = processor.decode(out[0], skip_special_tokens=True)     ## Generate the Caption
+                        print("generated caption:", generated_cap)
+    
+                    ## We formulate one editing prompt per scene
+                    if b_id == 0:   
 
+                        #               ## GPT-4 based prompt generation ##
+                        # editing_prompt_SD = generate_prompts_gpt(generated_cap, num_prompts=1)[0]
+                        # editing_prompt = editing_prompt_SD
+
+                                        ## Manual Prompt Formulation ##
+                        edit_choice = np.random.choice([1,2,3], 1)
+                        if edit_choice==1:
+                            id_edit = int(np.random.choice(len(painters_style),1, replace = False))
+                            edit = painters_style[id_edit]
+                            editing_prompt = edit + " painting of " + generated_cap 
+                        elif edit_choice==2:
+                            id_edit = int(np.random.choice(len(color),1))
+                            edit = color[id_edit]
+                            editing_prompt = generated_cap + " in " + edit + " color"
+                        else:
+                            id_edit = int(np.random.choice(len(painting_styles),1))
+                            edit = painting_styles[id_edit]
+                            editing_prompt = generated_cap + " in " + edit + " style" 
+
+                        editing_prompt_SD = editing_prompt + ', with a focus on color and shape, relaistic look with accuracte details'
                     
-                    if b_id == 0:   ## We generate 1 prompt per scene
-
-                                        ## GPT-4 based prompt generation ##
-                        editing_prompt_SD = generate_prompts_gpt(generated_cap, num_prompts=1)[0]
-                        editing_prompt = editing_prompt_SD
-
-                                        ## Manual Editing ##
-                        # edit_choice = np.random.choice([1,2,3], 1)
-                        # if edit_choice==1:
-                        #     id_edit = np.random.choice(len(painters_style),1, replace = False)
-                        #     edit = painters_style[id_edit]
-                        #     editing_prompt = edit + "painting of " + generated_cap 
-                        # elif edit_choice==2:
-                        #     id_edit = np.random.choice(len(color),1)
-                        #     edit = color[id_edit]
-                        #     editing_prompt = generated_cap + "in" + edit + "color"
-                        # else:
-                        #     id_edit = np.random.choice(len(painting_styles),1)
-                        #     edit = painting_styles[id_edit]
-                        #     editing_prompt = generated_cap + "in" + edit + "style" 
-
-                        # editing_prompt_SD = editing_prompt +  + ', relaistic look with accuracte details'
+                    print("Generated Prompt:", editing_prompt)
                 
                     ## Get the starting and target views 
-                    starting_view = Image.fromarray((255*batch["starting_view"]).astype(np.uint8))
-                    target_view   = Image.fromarray((255*batch["traget_rgb"]).astype(np.uint8))
+                    starting_view = Image.fromarray(255*batch["starting_view"].squeeze().numpy().astype(np.uint8))
+                    target_view   = Image.fromarray(255*batch["traget_rgb"].squeeze().numpy().astype(np.uint8))
                     nearest_pose_ids  = batch["nearest_pose_ids"]
                     save_dir_target   = scene_dir + "_edited"
-                    # save_dir_starting = os.path.dirname(batch["starting_rgb_path"]) + "_edited"
                     os.makedirs(save_dir_target, exist_ok=True)
-                    # os.makedirs(save_dir_starting, exist_ok=True)
-                    
+
+                    width, height = starting_view.size
+                    print(f"Width: {width}, Height: {height}")
+
                     ## Edit the Target and Starting Views 
                     results = {}
                     
@@ -332,25 +310,34 @@ def main():
                                 continue
                             torch.manual_seed(seed)
 
-                        cfg_scale        = opt.min_cfg + torch.rand(()).item() * (opt.max_cfg - opt.min_cfg)
-                        starting_view_ed = edit_image_with_prompt(SD_pipe, starting_view, editing_prompt_SD, num_inference_steps = 30, guidance_scale = cfg_scale)
-                        target_view_ed   = edit_image_with_prompt(SD_pipe, target_view, editing_prompt_SD, num_inference_steps = 30, guidance_scale = cfg_scale)
+                            cfg_scale  = opt.min_cfg + torch.rand(()).item() * (opt.max_cfg - opt.min_cfg)
+                            
+                            ### If we use stable diffusion
+                            with torch.no_grad():
+                                starting_view_ed = edit_image_with_prompt(SD_pipe, starting_view, editing_prompt_SD, num_inference_steps = opt.steps, guidance_scale = cfg_scale)
+                                target_view_ed   = edit_image_with_prompt(SD_pipe, target_view, editing_prompt_SD, num_inference_steps = opt.steps, guidance_scale = cfg_scale)
 
-                        clip_sim_0, clip_sim_1, clip_sim_dir, clip_sim_image = clip_similarity(
-                            target_view_ed, starting_view_ed, [editing_prompt], [editing_prompt]
-                        )
+                            # ## If we use IP2P pipeline
+                            # with torch.no_grad(): 
+                            #     starting_view_ed = Edit_with_IP2P(IP2P_pipe, starting_view, editing_prompt_SD, num_inference_steps=30, guidance_scale=cfg_scale, image_guidance_scale=1.5)
+                            #     target_view_ed   = Edit_with_IP2P(IP2P_pipe, target_view, editing_prompt_SD, num_inference_steps=30, guidance_scale=cfg_scale, image_guidance_scale=1.5)
 
-                        results[seed] = dict(
-                            image_0=torch_to_pil(starting_view_ed),
-                            image_1=torch_to_pil(target_view_ed),
-                            cfg_scale=cfg_scale,
-                            clip_sim_0=clip_sim_0[0].item(),
-                            clip_sim_1=clip_sim_1[0].item(),
-                            clip_sim_dir=clip_sim_dir[0].item(),
-                            clip_sim_image=clip_sim_image[0].item(),
-                        )
+                            clip_sim_0, clip_sim_1, clip_sim_dir_0, clip_sim_dir_1, clip_sim_image = clip_similarity(
+                                pil_to_torch(target_view_ed), pil_to_torch(starting_view_ed), [editing_prompt], [editing_prompt],  pil_to_torch(target_view), pil_to_torch(starting_view),[generated_cap]
+                            )
+                            print(clip_sim_0, clip_sim_1, clip_sim_dir_0, clip_sim_dir_1, clip_sim_image)
 
-                        progress_bar.update()
+                            results[seed] = dict(
+                                image_0=starting_view_ed,
+                                image_1=target_view_ed,
+                                cfg_scale=cfg_scale,
+                                clip_sim_0=clip_sim_0[0].item(),
+                                clip_sim_1=clip_sim_1[0].item(),
+                                clip_sim_dir=np.mean(clip_sim_dir_0[0].item(),clip_sim_dir_1[1].item()),
+                                clip_sim_image=clip_sim_image[0].item(),
+                            )
+
+                            progress_bar.update()
 
                     ## CLIP filter to get best samples for each prompt.
                     metadata = [
@@ -371,18 +358,12 @@ def main():
                         image_1 = result.pop("image_1")
                         image_0.save(save_dir_target.joinpath(f"s_view_{index_ed}_{b_id}_{seed}.jpg"), quality=100, subsampling=0)
                         image_1.save(save_dir_target.joinpath(f"t_view{index_ed}_{b_id}_{seed}.jpg"), quality=100, subsampling=0)
-                        
-                        ## If we want to save all edited pair info of a scene
-                        # starting_view_files.append(save_dir_starting.joinpath(f"s_view_{index_ed}_{b_id}_{seed}.jpg"))
-                        # target_view_files.append(save_dir_target.joinpath(f"t_view_{index_ed}_{b_id}_{seed}.jpg"))
-                        # nearest_ids_list.append(nearest_pose_ids)
-                        # CLIP_text_image_sim.append(np.mean(clip_sim_0[0].item(),clip_sim_1[0].item()),)
-                        # CLIP_image_sim.append(clip_sim_image[0].item())    
 
                         ## Saving one edited pair info at a time
                         starting_view_file  = save_dir_target.joinpath(f"s_view_{index_ed}_{b_id}_{seed}.jpg")
                         target_view_file    = save_dir_target.joinpath(f"t_view_{index_ed}_{b_id}_{seed}.jpg")
                         CLIP_text_image_sim = np.mean(clip_sim_0[0].item(),clip_sim_1[0].item())
+                        print("Edited Images Saved  ................")
 
                     ## If 15 images have been edited 
                     if b_id == num_starting_view:
@@ -390,7 +371,7 @@ def main():
             
                     ## Save the metadata of each edited pair
                     Scene_info = dict(
-                        # dataset_name = dataset, 
+                        dataset_name = dataset, 
                         scene_name = scene,
                         # editing_prompt = editing_prompt,
                         starting_view_file=starting_view_file,
@@ -398,16 +379,18 @@ def main():
                         nearest_pose_ids = nearest_pose_ids,              ## We need this to select the non-edited images from each scene
                         render_pose = batch["render_pose"],
                         camera_matrices  = batch["camera_matrices"],   
-                        # total_num_images = batch["num_images_in_scene"],   
-                        # depth_range = batch["depth_range"],
-                        # cfg_scale=cfg_scale,
                         clip_text_to_img_similarity=CLIP_text_image_sim,  ## while training, we will prioritize edited samples based on this 
-                        # clip_image_similarity=clip_sim_image[0].item(),
                     )
 
                     ## Save the metadata
                     with open(scene_dir.joinpath(f"{scene}_edited_metadata.jsonl"), "a") as fp:
                         fp.write(f"{json.dumps(dict(seed=seed, **Scene_info))}\n")
+
+
+                # # Clear cache after using SD model (FOR GPU Resource Limitations)
+                # del SD_pipe
+                # gc.collect()             #Forces the garbage collector to free up memory immediately
+                # torch.cuda.empty_cache() 
 
     print("Done.")
 
