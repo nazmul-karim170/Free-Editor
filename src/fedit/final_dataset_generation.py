@@ -15,6 +15,9 @@ from pytorch_lightning import seed_everything
 from tqdm import tqdm
 import gc
 import torchvision.transforms as transforms
+from pathlib import Path
+import pickle
+import glob
 
 # sys.path.append("./")
 # sys.path.append("./stable_diffusion")
@@ -24,12 +27,10 @@ import torchvision.transforms as transforms
 from data_loaders.metrics.clip_similarity import ClipSimilarity
 from PIL import Image
 from transformers import BlipProcessor, BlipForConditionalGeneration
-from diffusers import DiffusionPipeline, StableDiffusionPipeline, StableDiffusionImg2ImgPipeline, StableDiffusion3Pipeline, UniPCMultistepScheduler
+from diffusers import DiffusionPipeline, StableDiffusionPipeline, StableDiffusionImg2ImgPipeline, StableDiffusion3Pipeline, StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler, UniPCMultistepScheduler
 from data_loaders import dataset_dict         # from create_training_dataset import create_training_dataset
 import config_data_generation
-import openai
-from diffusers import StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
-
+from GPT_4o import generate_prompts_gpt
 
 
 ################################################################################
@@ -128,7 +129,7 @@ def main():
     parser.add_argument(
         "--n-samples",
         type=int,
-        default=1,
+        default=10,
         help="Number of samples to generate per prompt (before CLIP filtering).",
     )
     parser.add_argument(
@@ -152,19 +153,19 @@ def main():
     parser.add_argument(
         "--min-cfg",
         type=float,
-        default=7.5,
+        default=6,
         help="Min classifier free guidance scale.",
     )
     parser.add_argument(
         "--max-cfg",
         type=float,
-        default=11,
+        default=10,
         help="Max classifier free guidance scale.",
     )
     parser.add_argument(
         "--clip-threshold",
         type=float,
-        default=0.3,
+        default=0.1,
         help="CLIP threshold for text-image similarity of each image.",
     )
     parser.add_argument(
@@ -176,7 +177,7 @@ def main():
     parser.add_argument(
         "--clip-img-threshold",
         type=float,
-        default=0.3,
+        default=0.5,
         help="CLIP threshold for image-image similarity.",
     )
     opt = parser.parse_args()
@@ -206,12 +207,11 @@ def main():
     parser = config_data_generation.config_parser()
     args = parser.parse_args()
     train_datasets = ['nerf_synth_generation','nerf_synthetic', 'llff', 'spaces', 'ibrnet_collected', 'realestate', 'google_scanned', 'deepvoxels']
-    mode = 'train'
 
             ### Generate the Editing Prompts (Update these) ###
-    painting_styles = ["Baroque","Realism","Impressionism","Op Art","Fauvism","Tonalism","Ashcan School","Rococo","Symbolism","Outsider Art"]
+    painting_styles = ["Baroque",  "sci-fi style", "Realism","Impressionism","Op Art","Fauvism","Tonalism","Ashcan School","Rococo","Symbolism","Outsider Art"]
     painters_style  = ["Leonardo da Vinci", "Vincent van Gogh", "Sam Francis","Max Ernst", "Henri Matisse", "Eva Hesse", "Carl Andre", "Cy Twombly", "watercolor painting"]
-    color           = ["pink", "red", "orange", "white","purple","green","blue", "silver", "gold", 'bronze']
+    color           = ["pink", "black-and-white color", "mix of rainbow", "red", "icy", "marble", "orange", " glossy metallic", "white","purple","green","blue", "silver", "gold", 'bronze']
     
     total_edits = 5
     number_of_edits = 20 
@@ -221,23 +221,57 @@ def main():
         
         dataset = 'nerf_synthetic'  ## For Testing 
 
-        ## Metadata Save Directory
-        dataset_dir = os.path.join("../../../data", dataset)
-        if dataset == 'nerf_synthetic' or "nerf_synth_generation":
+        ## Dataset Directory
+        relative_data_path = "../../../data"        ## Change it according to your directories
+        dataset_dir = os.path.join(relative_data_path, dataset)
+        
+        if dataset == 'nerf_synthetic' or "nerf_synthetic_generation":
             train_scenes = ["chair", "drums", "lego", "hotdog", "materials", "mic", "ship"]
+        elif dataset == 'realestate':
+            folder_path = os.path.join(dataset_dir, 'frames')
+            train_scenes = [name for name in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, name))]
+        elif dataset == 'ibrnet_collected':
+            folder_path_1 = os.path.join(dataset_dir, 'ibrnet_collected_1')
+            folder_path_2 = os.path.join(dataset_dir, 'ibrnet_collected_2')
+            train_scenes  = glob.glob(folder_path_1 + "*") + glob.glob(folder_path_2 + "*")
+        elif dataset == 'deepvoxels':
+            modes = ['train', 'test', 'validation']
+            train_scenes = []
+            modes_list = []
+            for mode in modes:
+                folder_path  = os.path.join(dataset_dir, mode)
+                train_scenes_1 = [name for name in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, name))]
+                train_scenes.extend(train_scenes_1)   
+                modes_list.extend([mode]*len(train_scenes_1))    
 
-        for scene in train_scenes:
+        elif dataset == "real_iconic_noface" or "google_scanned_objects" or "shiny" or "spaces":
+            folder_path  = dataset_dir
+            train_scenes = [name for name in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, name))]            
+
+        ## Go Scene-by-Scene
+        for i, scene in enumerate(train_scenes):            
             
             ## Scene Directory
-            scene_dir  = os.path.join(dataset_dir, scene)
+            scene_edit_dir = Path(scene + "_edited")
+            os.makedirs(scene_edit_dir, exist_ok=True)
+
+            ## Edited Directory (Relative)
+            if dataset == 'ibrnet_collected':
+                save_dir_target = scene_edit_dir 
+            else:
+                scene_dir_in  = os.path.join(dataset_dir, scene)
+                save_dir_target   = Path(scene_dir_in + "_edited")
+                os.makedirs(save_dir_target, exist_ok=True)
 
             ## Get the Dataloader (We have to go through scene by scene)
-            train_dataset = dataset_dict["nerf_synth_generation"](
-                args,
-                mode,
-                scenes=scene,
-            )
-            
+            dataset_tag   = dataset + "_generation"
+            if dataset == 'deepvoxels':
+                mode = modes_list[i]
+            else:
+                mode = 'train' 
+                
+            train_dataset = dataset_dict[dataset_tag](args, mode, scenes=scene)
+
             train_loader = torch.utils.data.DataLoader(
                 train_dataset,
                 batch_size=1,
@@ -284,16 +318,14 @@ def main():
                             edit = painting_styles[id_edit]
                             editing_prompt = generated_cap + " in " + edit + " style" 
 
-                        editing_prompt_SD = editing_prompt + ', with a focus on color and shape, relaistic look with accuracte details'
+                        editing_prompt_SD = editing_prompt + ', with a focus on accurate color and shape, photorealistic details'
                     
                     print("Generated Prompt:", editing_prompt)
                 
                     ## Get the starting and target views 
-                    starting_view = Image.fromarray(255*batch["starting_view"].squeeze().numpy().astype(np.uint8))
-                    target_view   = Image.fromarray(255*batch["traget_rgb"].squeeze().numpy().astype(np.uint8))
+                    starting_view = Image.fromarray(255*batch["starting_view"].squeeze().astype(np.uint8))
+                    target_view   = Image.fromarray(255*batch["traget_rgb"].squeeze().astype(np.uint8))
                     nearest_pose_ids  = batch["nearest_pose_ids"]
-                    save_dir_target   = scene_dir + "_edited"
-                    os.makedirs(save_dir_target, exist_ok=True)
 
                     width, height = starting_view.size
                     print(f"Width: {width}, Height: {height}")
@@ -325,15 +357,15 @@ def main():
                             clip_sim_0, clip_sim_1, clip_sim_dir_0, clip_sim_dir_1, clip_sim_image = clip_similarity(
                                 pil_to_torch(target_view_ed), pil_to_torch(starting_view_ed), [editing_prompt], [editing_prompt],  pil_to_torch(target_view), pil_to_torch(starting_view),[generated_cap]
                             )
-                            print(clip_sim_0, clip_sim_1, clip_sim_dir_0, clip_sim_dir_1, clip_sim_image)
+                            print(clip_sim_0[0].cpu().item(), clip_sim_1, clip_sim_dir_0, clip_sim_dir_1, clip_sim_image)
 
                             results[seed] = dict(
                                 image_0=starting_view_ed,
                                 image_1=target_view_ed,
                                 cfg_scale=cfg_scale,
-                                clip_sim_0=clip_sim_0[0].item(),
-                                clip_sim_1=clip_sim_1[0].item(),
-                                clip_sim_dir=np.mean(clip_sim_dir_0[0].item(),clip_sim_dir_1[1].item()),
+                                clip_sim_0=clip_sim_0[0].cpu().item(),
+                                clip_sim_1=clip_sim_1[0].cpu().item(),
+                                clip_sim_dir=np.mean([clip_sim_dir_0[0].cpu().item(), clip_sim_dir_1[0].cpu().item()]),
                                 clip_sim_image=clip_sim_image[0].item(),
                             )
 
@@ -341,7 +373,7 @@ def main():
 
                     ## CLIP filter to get best samples for each prompt.
                     metadata = [
-                        (np.mean(result["clip_sim_0"], result["clip_sim_1"]), seed)
+                        (np.mean([result["clip_sim_0"], result["clip_sim_1"]]), seed)
                         for seed, result in results.items()
                         if result["clip_sim_image"] >= opt.clip_img_threshold   ## Fix this 
                         and result["clip_sim_dir"] >= opt.clip_dir_threshold
@@ -351,40 +383,45 @@ def main():
                     metadata.sort(reverse=True)
                     print("metadata:", metadata)
 
-                    ## Save only the best pair 
-                    for _, seed in metadata[: opt.max_out_samples]:
-                        result = results[seed]
-                        image_0 = result.pop("image_0")
-                        image_1 = result.pop("image_1")
-                        image_0.save(save_dir_target.joinpath(f"s_view_{index_ed}_{b_id}_{seed}.jpg"), quality=100, subsampling=0)
-                        image_1.save(save_dir_target.joinpath(f"t_view{index_ed}_{b_id}_{seed}.jpg"), quality=100, subsampling=0)
+                    if metadata:
+                        ## Save only the best pair 
+                        for _, seed in metadata[: opt.max_out_samples]:
+                            result  = results[seed]
+                            image_0 = result.pop("image_0")
+                            image_1 = result.pop("image_1")
+                            image_0.save(save_dir_target.joinpath(f"s_view_{index_ed}_{b_id}_{seed}.jpg"), quality=100, subsampling=0)
+                            image_1.save(save_dir_target.joinpath(f"t_view{index_ed}_{b_id}_{seed}.jpg"), quality=100, subsampling=0)
 
-                        ## Saving one edited pair info at a time
-                        starting_view_file  = save_dir_target.joinpath(f"s_view_{index_ed}_{b_id}_{seed}.jpg")
-                        target_view_file    = save_dir_target.joinpath(f"t_view_{index_ed}_{b_id}_{seed}.jpg")
-                        CLIP_text_image_sim = np.mean(clip_sim_0[0].item(),clip_sim_1[0].item())
-                        print("Edited Images Saved  ................")
+                            ## Saving one edited pair info at a time
+                            starting_view_file  = scene_edit_dir.joinpath(f"s_view_{index_ed}_{b_id}_{seed}.jpg")
+                            target_view_file    = scene_edit_dir.joinpath(f"t_view_{index_ed}_{b_id}_{seed}.jpg")
+                            CLIP_text_image_sim = np.mean([clip_sim_0[0].cpu().item(),clip_sim_1[0].cpu().item()])
+                            print("Edited Images Saved  ................", starting_view_file)
 
-                    ## If 15 images have been edited 
-                    if b_id == num_starting_view:
-                        break
-            
-                    ## Save the metadata of each edited pair
-                    Scene_info = dict(
-                        dataset_name = dataset, 
-                        scene_name = scene,
-                        # editing_prompt = editing_prompt,
-                        starting_view_file=starting_view_file,
-                        target_view_file=target_view_file,
-                        nearest_pose_ids = nearest_pose_ids,              ## We need this to select the non-edited images from each scene
-                        render_pose = batch["render_pose"],
-                        camera_matrices  = batch["camera_matrices"],   
-                        clip_text_to_img_similarity=CLIP_text_image_sim,  ## while training, we will prioritize edited samples based on this 
-                    )
+                        ## If 15 images have been edited 
+                        if b_id == num_starting_view:
+                            break
+                
+                        ## Save the metadata of each edited pair
+                        Scene_info = dict(
+                            dataset_name = dataset, 
+                            scene_name = scene,
+                            depth_range = batch["depth_range"],
+                            starting_view_file = starting_view_file,
+                            target_view_file = target_view_file,
+                            nearest_pose_ids = nearest_pose_ids,              ## We need this to select the non-edited images from each scene
+                            render_pose = batch["render_pose"] if  batch["render_pose"] else None,
+                            target_camera_matrices  = batch["target_camera_matrices"],   
+                            starting_camera_matrices  = batch["starting_camera_matrices"],   
+                            clip_text_to_img_similarity=CLIP_text_image_sim,  ## while training, we will prioritize edited samples based on this 
+                        )
 
-                    ## Save the metadata
-                    with open(scene_dir.joinpath(f"{scene}_edited_metadata.jsonl"), "a") as fp:
-                        fp.write(f"{json.dumps(dict(seed=seed, **Scene_info))}\n")
+                        ## Save the metadata
+                        scene_dir = Path(scene_dir_in)
+
+                        # Save the metadata using pickle
+                        with open(scene_dir.joinpath(f"{scene}_edited_metadata.pkl"), "ab") as fp:
+                            pickle.dump(dict(seed=seed, **Scene_info), fp)
 
 
                 # # Clear cache after using SD model (FOR GPU Resource Limitations)
