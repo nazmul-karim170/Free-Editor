@@ -1,3 +1,5 @@
+## The Repo is Under Construction! Thanks for the patience. Should be Completed by Nov 30, 2024 ##
+
 <h2 align="center"> <a href="https://github.com/nazmul-karim170/FreeEditor-Text-to-3D-Scene-Editing">Free-Editor: Zero-shot Text-driven 3D Scene Editing</a></h2>
 <h5 align="center"> If you like our project, please give us a star ⭐ on GitHub for the latest update.  </h2>
 
