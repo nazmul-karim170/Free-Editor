@@ -1,56 +1,12 @@
-[rank: 0] Seed set to 3438762402
+[rank: 0] Seed set to 3627040480
 /scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:1617: FutureWarning: `clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This behavior will be deprecated in transformers v4.45, and will be then set to `False` by default. For more details check this issue: https://github.com/huggingface/transformers/issues/31884
   warnings.warn(
-Downloading shards:   0%|          | 0/2 [00:00<?, ?it/s]Downloading shards:   0%|          | 0/2 [02:47<?, ?it/s]
-Traceback (most recent call last):
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/urllib3/response.py", line 748, in _error_catcher
-    yield
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/urllib3/response.py", line 894, in _raw_read
-    raise IncompleteRead(self._fp_bytes_read, self.length_remaining)
-urllib3.exceptions.IncompleteRead: IncompleteRead(1579765133 bytes read, 8416235307 more expected)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/requests/models.py", line 820, in generate
-    yield from self.raw.stream(chunk_size, decode_content=True)
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/urllib3/response.py", line 1060, in stream
-    data = self.read(amt=amt, decode_content=decode_content)
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/urllib3/response.py", line 977, in read
-    data = self._raw_read(amt)
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/urllib3/response.py", line 872, in _raw_read
-    with self._error_catcher():
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/contextlib.py", line 153, in __exit__
-    self.gen.throw(typ, value, traceback)
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/urllib3/response.py", line 772, in _error_catcher
-    raise ProtocolError(arg, e) from e
-urllib3.exceptions.ProtocolError: ('Connection broken: IncompleteRead(1579765133 bytes read, 8416235307 more expected)', IncompleteRead(1579765133 bytes read, 8416235307 more expected))
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/scratch/home/kan2pi/SSL_WiFi/Code_Vision/FEDIT/fedit/final_dataset_generation.py", line 417, in <module>
-    main()
-  File "/scratch/home/kan2pi/SSL_WiFi/Code_Vision/FEDIT/fedit/final_dataset_generation.py", line 222, in main
-    model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b").to("cuda")
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/transformers/modeling_utils.py", line 3769, in from_pretrained
-    resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/transformers/utils/hub.py", line 1098, in get_checkpoint_shard_files
-    cached_filename = cached_file(
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/transformers/utils/hub.py", line 403, in cached_file
-    resolved_file = hf_hub_download(
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/huggingface_hub/utils/_deprecation.py", line 101, in inner_f
-    return f(*args, **kwargs)
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
-    return fn(*args, **kwargs)
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/huggingface_hub/file_download.py", line 1232, in hf_hub_download
-    return _hf_hub_download_to_cache_dir(
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/huggingface_hub/file_download.py", line 1381, in _hf_hub_download_to_cache_dir
-    _download_to_tmp_and_move(
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/huggingface_hub/file_download.py", line 1915, in _download_to_tmp_and_move
-    http_get(
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/huggingface_hub/file_download.py", line 541, in http_get
-    for chunk in r.iter_content(chunk_size=constants.DOWNLOAD_CHUNK_SIZE):
-  File "/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/requests/models.py", line 822, in generate
-    raise ChunkedEncodingError(e)
-requests.exceptions.ChunkedEncodingError: ('Connection broken: IncompleteRead(1579765133 bytes read, 8416235307 more expected)', IncompleteRead(1579765133 bytes read, 8416235307 more expected))
+/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/torch/_utils.py:831: UserWarning: TypedStorage is deprecated. It will be removed in the future and UntypedStorage will be the only storage class. This should only matter to you if you are using storages directly.  To access UntypedStorage directly, use tensor.untyped_storage() instead of tensor.storage()
+  return self.fget.__get__(instance, owner)()
+/scratch/home/kan2pi/anaconda3/envs/nerfstudio/lib/python3.10/site-packages/transformers/generation/utils.py:1220: UserWarning: Using the model-agnostic default `max_length` (=20) to control the generation length. We recommend setting `max_new_tokens` to control the maximum length of the generation.
+  warnings.warn(
+Fetching 13 files:   0%|          | 0/13 [00:00<?, ?it/s]Fetching 13 files:   8%|▊         | 1/13 [00:01<00:14,  1.20s/it]Fetching 13 files:  23%|██▎       | 3/13 [00:01<00:03,  2.74it/s]Fetching 13 files:  38%|███▊      | 5/13 [02:15<04:36, 34.62s/it]Fetching 13 files:  85%|████████▍ | 11/13 [15:57<03:30, 105.08s/it]Fetching 13 files: 100%|██████████| 13/13 [15:57<00:00, 73.67s/it] 
+Loading pipeline components...:   0%|          | 0/6 [00:00<?, ?it/s]Loading pipeline components...:  33%|███▎      | 2/6 [00:03<00:06,  1.55s/it]Loading pipeline components...:  67%|██████▋   | 4/6 [00:33<00:19,  9.52s/it]Loading pipeline components...: 100%|██████████| 6/6 [00:37<00:00,  6.23s/it]Loading pipeline components...: 100%|██████████| 6/6 [00:37<00:00,  6.32s/it]
+/scratch/home/kan2pi/SSL_WiFi/Code_Vision/Free-Editor/src/fedit/final_dataset_generation.py:308: DeprecationWarning: Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)
+  id_edit = int(np.random.choice(len(painters_style),1, replace = False))
+Samples:   0%|          | 0/5 [00:00<?, ?it/s]slurmstepd: error: *** JOB 43214 ON node005 CANCELLED AT 2024-11-15T19:44:08 ***

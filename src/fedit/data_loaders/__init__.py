@@ -1,11 +1,9 @@
 from .google_scanned_objects import *
 from .realestate import *
 from .deepvoxels import *
-from .realestate import *
 from .llff import *
 from .llff_test import *
 from .ibrnet_collected import *
-from .realestate import *
 from .spaces_dataset import *
 from .nerf_synthetic import *
 from .shiny import *
@@ -13,7 +11,6 @@ from .llff_render import *
 from .shiny_render import *
 from .nerf_synthetic_render import *
 from .nmr_dataset import *
-from .nerf_synthetic_generated import *
 
 dataset_dict = {
     "spaces": SpacesFreeDataset,
@@ -29,5 +26,4 @@ dataset_dict = {
     "shiny_render": ShinyRenderDataset,
     "nerf_synthetic_render": NerfSyntheticRenderDataset,
     "nmr": NMRDataset,
-    "nerf_synth_generation": NerfSynthGenerationDataset,
 }

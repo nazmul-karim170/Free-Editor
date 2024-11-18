@@ -59,10 +59,10 @@ def train(args):
         if not os.path.isfile(f):
             shutil.copy(args.config, f)
 
-    # create training dataset
-    train_dataset, train_sampler = create_training_dataset(args)
+    ## create training dataset
     # currently only support batch_size=1 (i.e., one set of target and source views) for each GPU node
     # please use distributed parallel on multiple GPUs to train multiple target views per batch
+    train_dataset, train_sampler = create_training_dataset(args)
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=1,
@@ -73,9 +73,8 @@ def train(args):
         shuffle=True if train_sampler is None else False,
     )
 
-    # create validation dataset
+    ## create validation dataset and data loader
     val_dataset = dataset_dict[args.eval_dataset](args, "validation", scenes=args.eval_scenes)
-
     val_loader = DataLoader(val_dataset, batch_size=1)
     val_loader_iterator = iter(cycle(val_loader))
 
@@ -83,7 +82,8 @@ def train(args):
     model = FEDITModel(
         args, load_opt=not args.no_load_opt, load_scheduler=not args.no_load_scheduler
     )
-    # create projector
+    
+    ## create projector
     projector = Projector(device=device)
 
     # Create criterion
@@ -100,12 +100,12 @@ def train(args):
             if args.distributed:
                 train_sampler.set_epoch(epoch)
 
-            # Start of core optimization loop
-
-            # load training rays
+                ## Start of core optimization loop##
+                ####################################
+            ## load training rays
             ray_sampler = RaySamplerSingleImage(train_data, device)
             N_rand = int(
-                1.0 * args.N_rand * args.num_source_views / train_data["src_rgbs"][0].shape[0]
+                1.0 * args.N_rand * (args.num_source_views+1) / train_data["src_rgbs"][0].shape[0]
             )
             ray_batch = ray_sampler.random_sample(
                 N_rand,
@@ -114,15 +114,16 @@ def train(args):
             )
             
             ## Feature Maps for Starting and Source RGBs
-            featmaps_start = model.feature_net(ray_batch["starting_view"].squeeze(0).permute(0, 3, 1, 2))
+            # featmaps_start = model.feature_net(ray_batch["starting_view"].squeeze(0).permute(0, 3, 1, 2))
             featmaps_src = model.feature_net(ray_batch["src_rgbs"].squeeze(0).permute(0, 3, 1, 2))
-
+            
+            ## Feead the 
             ret = render_rays(
                 ray_batch=ray_batch,
                 model=model,
                 projector=projector,
-                featmaps_start = featmaps_start,
-                featmaps_src = featmaps_src,
+                # featmaps_start = featmaps_start,
+                featmaps = featmaps_src,
                 N_samples=args.N_samples,
                 inv_uniform=args.inv_uniform,
                 N_importance=args.N_importance,

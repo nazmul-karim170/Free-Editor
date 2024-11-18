@@ -4,6 +4,7 @@ import imageio
 import torch
 from torch.utils.data import Dataset
 import sys
+import pickle 
 
 sys.path.append("../")
 from .data_utils import random_crop, random_flip, get_nearest_pose_ids
@@ -13,6 +14,7 @@ from .llff_data_utils import load_llff_data, batch_parse_llff_poses
 class LLFFDataset(Dataset):
     def __init__(self, args, mode, **kwargs):
         base_dir = os.path.join(args.rootdir, "data/real_iconic_noface/")
+        self.dataset_dir = base_dir
         self.args = args
         self.mode = mode  ## train / test / validation
         self.num_source_views = args.num_source_views
@@ -27,6 +29,17 @@ class LLFFDataset(Dataset):
         self.train_rgb_files = []
 
         scenes = os.listdir(base_dir)
+        self.scene_path_list = []
+        for scene in scenes:
+            self.scene_path =  os.path.join(base_dir, scene)
+
+            ## Load the Metadata containing 
+            with open(self.scene_path.joinpath(f"{scene}_edited_metadata.pkl"), "rb") as file:
+                self.scene_metadata = pickle.load(file)
+            
+            self.metadata.extend(self.scene_metadata)
+            self.scene_path_list.append(self.scene_path)
+
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(base_dir, scene)
             _, poses, bds, render_poses, i_test, rgb_files = load_llff_data(
@@ -64,50 +77,51 @@ class LLFFDataset(Dataset):
         return len(self.render_rgb_files)
 
     def __getitem__(self, idx):
-        rgb_file = self.render_rgb_files[idx]
-        rgb = imageio.imread(rgb_file).astype(np.float32) / 255.0
-        render_pose = self.render_poses[idx]
-        intrinsics = self.render_intrinsics[idx]
-        depth_range = self.render_depth_range[idx]
-
-        train_set_id = self.render_train_set_ids[idx]
-        train_rgb_files = self.train_rgb_files[train_set_id]
-        train_poses = self.train_poses[train_set_id]
-        train_intrinsics = self.train_intrinsics[train_set_id]
-
-        img_size = rgb.shape[:2]
-        camera = np.concatenate(
-            (list(img_size), intrinsics.flatten(), render_pose.flatten())
-        ).astype(np.float32)
+        metadata = self.metadata[idx]
+        starting_view  = imageio.imread(os.path.join(self.dataset_dir, metadata["starting_view_file"])).astype(np.float32) / 255.0
+        rgb    = imageio.imread(os.path.join(self.dataset_dir,metadata["target_view_file"])).astype(np.float32) / 255.0
+        render_pose    = metadata["render_pose"] 
+        camera  = metadata["target_camera_matrices"]
+        start_camera   = metadata["starting_camera_matrices"]
+        scene     = metadata["scene_name"]                       ## Scene Path
+        nearest_pose_ids = metadata["nearest_pose_ids"]          ## make sure to select at least (2*self.num_source_views) 
+        depth_range = metadata["depth_range"]
+        nearest_pose_ids = np.random.choice(nearest_pose_ids, self.num_source_views, replace=False)
+        scene_path =  os.path.join(self.dataset_dir, scene)
+        
+        _, poses, bds, render_poses, i_test, rgb_files = load_llff_data(
+            scene_path, load_imgs=False, factor=4
+        )
+        near_depth = np.min(bds)
+        far_depth = np.max(bds)
+        intrinsics, c2w_mats = batch_parse_llff_poses(poses)
 
         if self.mode == "train":
-            id_render = train_rgb_files.index(rgb_file)
-            subsample_factor = np.random.choice(np.arange(1, 4), p=[0.2, 0.45, 0.35])
-            num_select = self.num_source_views + np.random.randint(low=-2, high=3)
+            i_train = np.array(np.arange(int(poses.shape[0])))
+            i_render = i_train
         else:
-            id_render = -1
-            subsample_factor = 1
-            num_select = self.num_source_views
+            i_test = np.arange(poses.shape[0])[:: self.args.llffhold]
+            i_train = np.array(
+                [
+                    j
+                    for j in np.arange(int(poses.shape[0]))
+                    if (j not in i_test and j not in i_test)
+                ]
+            )
+            i_render = i_test
 
-        nearest_pose_ids = get_nearest_pose_ids(
-            render_pose,
-            train_poses,
-            min(self.num_source_views * subsample_factor, 20),
-            tar_id=id_render,
-            angular_dist_method="dist",
-        )
-        nearest_pose_ids = np.random.choice(
-            nearest_pose_ids, min(num_select, len(nearest_pose_ids)), replace=False
-        )
 
-        assert id_render not in nearest_pose_ids
+        mean_depth = np.mean(depth_range)
+        world_center = (render_pose.dot(np.array([[0, 0, mean_depth, 1]]).T)).flatten()[:3]
 
-        ## occasionally include input image
-        if np.random.choice([0, 1], p=[0.995, 0.005]) and self.mode == "train":
-            nearest_pose_ids[np.random.choice(len(nearest_pose_ids))] = id_render
+        train_rgb_files = np.array(rgb_files)[i_render].tolist()
+        train_poses = c2w_mats[i_render]
+        train_intrinsics = intrinsics[i_render]
 
         src_rgbs = []
         src_cameras = []
+        src_rgb.append(starting_view)
+        src_cameras.append(start_camera)
         for id in nearest_pose_ids:
             src_rgb = imageio.imread(train_rgb_files[id]).astype(np.float32) / 255.0
             train_pose = train_poses[id]
@@ -138,7 +152,7 @@ class LLFFDataset(Dataset):
         return {
             "rgb": torch.from_numpy(rgb[..., :3]),
             "camera": torch.from_numpy(camera),
-            "rgb_path": rgb_file,
+            "rgb_path": os.path.join(self.dataset_dir,metadata["target_view_file"]),
             "src_rgbs": torch.from_numpy(src_rgbs[..., :3]),
             "src_cameras": torch.from_numpy(src_cameras),
             "depth_range": depth_range,

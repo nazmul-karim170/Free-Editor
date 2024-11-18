@@ -17,24 +17,24 @@ def sample_pdf(bins, weights, N_samples, det=False):
 
     M = weights.shape[1]
     weights += 1e-5
-    # Get pdf
+    ## Get pdf
     pdf = weights / torch.sum(weights, dim=-1, keepdim=True)  # [N_rays, M]
     cdf = torch.cumsum(pdf, dim=-1)  # [N_rays, M]
     cdf = torch.cat([torch.zeros_like(cdf[:, 0:1]), cdf], dim=-1)  # [N_rays, M+1]
 
-    # Take uniform samples
+    ## Take uniform samples
     if det:
         u = torch.linspace(0.0, 1.0, N_samples, device=bins.device)
         u = u.unsqueeze(0).repeat(bins.shape[0], 1)  # [N_rays, N_samples]
     else:
         u = torch.rand(bins.shape[0], N_samples, device=bins.device)
 
-    # Invert CDF
+    ## Invert CDF
     above_inds = torch.zeros_like(u, dtype=torch.long)  # [N_rays, N_samples]
     for i in range(M):
         above_inds += (u >= cdf[:, i : i + 1]).long()
 
-    # random sample inside each bin
+    ## random sample inside each bin
     below_inds = torch.clamp(above_inds - 1, min=0)
     inds_g = torch.stack((below_inds, above_inds), dim=2)  # [N_rays, N_samples, 2]
 
@@ -194,6 +194,7 @@ def sample_fine_pts(inv_uniform, N_importance, det, N_samples, ray_batch, weight
 def render_rays(
     ray_batch,
     model,
+    # featmaps_start,
     featmaps,
     projector,
     N_samples,

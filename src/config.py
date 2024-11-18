@@ -107,7 +107,8 @@ def config_parser():
     parser.add_argument(
         "--anti_alias_pooling", type=int, default=1, help="if use anti-alias pooling"
     )
-    parser.add_argument("--trans_depth", type=int, default=4, help="number of transformer layers")
+    parser.add_argument("--trans_depth", type=int, default=4, help="number of view transformer layers")
+    parser.add_argument("--edit_depth", type=int, default=2, help="number of transformer layers")
     parser.add_argument("--netwidth", type=int, default=64, help="network intermediate dimension")
     parser.add_argument(
         "--single_net",

@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import Dataset
 import glob
 import sys
-
+import pickle 
 sys.path.append("../")
 from .data_utils import rectify_inplane_rotation, get_nearest_pose_ids
 
@@ -18,67 +18,71 @@ class GoogleScannedDataset(Dataset):
         self.rectify_inplane_rotation = args.rectify_inplane_rotation
         self.scene_path_list = glob.glob(os.path.join(self.folder_path, "*"))
 
-        all_rgb_files = []
-        all_pose_files = []
-        all_intrinsics_files = []
         num_files = 250
-        for i, scene_path in enumerate(self.scene_path_list):
-            rgb_files = [
-                os.path.join(scene_path, "rgb", f)
-                for f in sorted(os.listdir(os.path.join(scene_path, "rgb")))
-            ]
-            pose_files = [f.replace("rgb", "pose").replace("png", "txt") for f in rgb_files]
-            intrinsics_files = [
-                f.replace("rgb", "intrinsics").replace("png", "txt") for f in rgb_files
-            ]
+        self.frame_path = self.folder_path
 
-            if np.min([len(rgb_files), len(pose_files), len(intrinsics_files)]) < num_files:
-                print(scene_path)
-                continue
+        train_scenes = [name for name in os.listdir(self.frame_path) if os.path.isdir(os.path.join(self.frame_path, name))]
 
-            all_rgb_files.append(rgb_files)
-            all_pose_files.append(pose_files)
-            all_intrinsics_files.append(intrinsics_files)
+        for scene in train_scenes:
+            self.scene_path =  os.path.join(self.frame_path, scene)
 
-        index = np.arange(len(all_rgb_files))
-        self.all_rgb_files = np.array(all_rgb_files)[index]
-        self.all_pose_files = np.array(all_pose_files)[index]
-        self.all_intrinsics_files = np.array(all_intrinsics_files)[index]
+            ## Load the Metadata containing 
+            with open(self.scene_path.joinpath(f"{scene}_edited_metadata.pkl"), "rb") as file:
+                self.scene_metadata = pickle.load(file)
+            
+            self.metadata.extend(self.scene_metadata)
+
+
+        # for i, scene_path in enumerate(self.scene_path_list):
+
+        #     rgb_files = [
+        #         os.path.join(scene_path, "rgb", f)
+        #         for f in sorted(os.listdir(os.path.join(scene_path, "rgb")))
+        #     ]
+        #     pose_files = [f.replace("rgb", "pose").replace("png", "txt") for f in rgb_files]
+        #     intrinsics_files = [
+        #         f.replace("rgb", "intrinsics").replace("png", "txt") for f in rgb_files
+        #     ]
+
+        #     if np.min([len(rgb_files), len(pose_files), len(intrinsics_files)]) < num_files:
+        #         print(scene_path)
+        #         continue
+
+        #     all_rgb_files.append(rgb_files)
+        #     all_pose_files.append(pose_files)
+        #     all_intrinsics_files.append(intrinsics_files)
+
+        # index = np.arange(len(all_rgb_files))
+        # self.all_rgb_files = np.array(all_rgb_files)[index]
+        # self.all_pose_files = np.array(all_pose_files)[index]
+        # self.all_intrinsics_files = np.array(all_intrinsics_files)[index]
 
     def __len__(self):
         return len(self.all_rgb_files)
 
     def __getitem__(self, idx):
-        rgb_files = self.all_rgb_files[idx]
-        pose_files = self.all_pose_files[idx]
-        intrinsics_files = self.all_intrinsics_files[idx]
 
-        id_render = np.random.choice(np.arange(len(rgb_files)))
-        train_poses = np.stack([np.loadtxt(file).reshape(4, 4) for file in pose_files], axis=0)
-        render_pose = train_poses[id_render]
-        subsample_factor = np.random.choice(np.arange(1, 6), p=[0.3, 0.25, 0.2, 0.2, 0.05])
+        ## Load the starting and target view
+        metadata = self.metadata[idx]
+        starting_view  = imageio.imread(os.path.join(self.folder_path,metadata["starting_view_file"])).astype(np.float32) / 255.0
+        rgb    = imageio.imread(os.path.join(self.folder_path,metadata["target_view_file"])).astype(np.float32) / 255.0
+        render_pose    = metadata["render_pose"] 
+        camera  = metadata["target_camera_matrices"]
+        start_camera   = metadata["starting_camera_matrices"]
+        scene_name     = metadata["scene_name"]
+        id_feat = metadata["nearest_pose_ids"]          ## make sure to select at least (2*self.num_source_views) 
+        id_feat = np.random.choice(id_feat, self.num_source_views, replace=False)
 
-        id_feat_pool = get_nearest_pose_ids(
-            render_pose,
-            train_poses,
-            self.num_source_views * subsample_factor,
-            tar_id=id_render,
-            angular_dist_method="vector",
-        )
-        id_feat = np.random.choice(id_feat_pool, self.num_source_views, replace=False)
+        scene_path =  os.path.join(self.folder_path, scene_name)
 
-        assert id_render not in id_feat
-        # occasionally include input image
-        if np.random.choice([0, 1], p=[0.995, 0.005]):
-            id_feat[np.random.choice(len(id_feat))] = id_render
-
-        rgb = imageio.imread(rgb_files[id_render]).astype(np.float32) / 255.0
-
-        intrinsics = np.loadtxt(intrinsics_files[id_render])
-        img_size = rgb.shape[:2]
-        camera = np.concatenate((list(img_size), intrinsics, render_pose.flatten())).astype(
-            np.float32
-        )
+        rgb_files = [
+            os.path.join(scene_path, "rgb", f)
+            for f in sorted(os.listdir(os.path.join(scene_path, "rgb")))
+        ]
+        pose_files = [f.replace("rgb", "pose").replace("png", "txt") for f in rgb_files]
+        intrinsics_files = [
+            f.replace("rgb", "intrinsics").replace("png", "txt") for f in rgb_files
+        ]
 
         # get depth range
         min_ratio = 0.1
@@ -90,6 +94,8 @@ class GoogleScannedDataset(Dataset):
 
         src_rgbs = []
         src_cameras = []
+        src_rgb.append(starting_view)
+        src_cameras.append(start_camera)
         for id in id_feat:
             src_rgb = imageio.imread(rgb_files[id]).astype(np.float32) / 255.0
             pose = np.loadtxt(pose_files[id])
@@ -110,7 +116,7 @@ class GoogleScannedDataset(Dataset):
         return {
             "rgb": torch.from_numpy(rgb),
             "camera": torch.from_numpy(camera),
-            "rgb_path": rgb_files[id_render],
+            "rgb_path": os.path.join(self.folder_path,metadata["target_view_file"]),
             "src_rgbs": torch.from_numpy(src_rgbs),
             "src_cameras": torch.from_numpy(src_cameras),
             "depth_range": depth_range,

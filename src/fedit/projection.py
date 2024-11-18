@@ -68,7 +68,7 @@ class Projector:
         num_views = len(train_poses)
         query_pose = (
             query_camera[-16:].reshape(-1, 4, 4).repeat(num_views, 1, 1)
-        )  # [n_views, 4, 4]
+        )   # [n_views, 4, 4]
         ray2tar_pose = query_pose[:, :3, 3].unsqueeze(1) - xyz.unsqueeze(0)
         ray2tar_pose /= torch.norm(ray2tar_pose, dim=-1, keepdim=True) + 1e-6
         ray2train_pose = train_poses[:, :3, 3].unsqueeze(1) - xyz.unsqueeze(0)
@@ -106,24 +106,24 @@ class Projector:
 
         h, w = train_cameras[0][:2]
 
-        # compute the projection of the query points to each reference image
+        ## compute the projection of the query points to each reference image
         pixel_locations, mask_in_front = self.compute_projections(xyz, train_cameras)
         normalized_pixel_locations = self.normalize(
             pixel_locations, h, w
         )  # [n_views, n_rays, n_samples, 2]
 
-        # rgb sampling
+        ## rgb sampling
         rgbs_sampled = F.grid_sample(train_imgs, normalized_pixel_locations, align_corners=True)
         rgb_sampled = rgbs_sampled.permute(2, 3, 0, 1)  # [n_rays, n_samples, n_views, 3]
 
-        # deep feature sampling
+        ## deep feature sampling
         feat_sampled = F.grid_sample(featmaps, normalized_pixel_locations, align_corners=True)
         feat_sampled = feat_sampled.permute(2, 3, 0, 1)  # [n_rays, n_samples, n_views, d]
         rgb_feat_sampled = torch.cat(
             [rgb_sampled, feat_sampled], dim=-1
         )  # [n_rays, n_samples, n_views, d+3]
 
-        # mask
+        ## mask
         inbound = self.inbound(pixel_locations, h, w)
         ray_diff = self.compute_angle(xyz, query_camera, train_cameras)
         ray_diff = ray_diff.permute(1, 2, 0, 3)

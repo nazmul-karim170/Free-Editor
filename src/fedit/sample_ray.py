@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+import cv2
 
 
 rng = np.random.RandomState(234)
@@ -19,8 +20,6 @@ def parse_camera(params):
 
 
 def dilate_img(img, kernel_size=20):
-    import cv2
-
     assert img.dtype == np.uint8
     kernel = np.ones((kernel_size, kernel_size), np.uint8)
     dilation = cv2.dilate(img / 255, kernel, iterations=1) * 255
@@ -42,7 +41,7 @@ class RaySamplerSingleImage(object):
         self.H = int(H[0])
         self.W = int(W[0])
 
-        # half-resolution output
+        ## half-resolution output
         if resize_factor != 1:
             self.W = int(self.W * resize_factor)
             self.H = int(self.H * resize_factor)
