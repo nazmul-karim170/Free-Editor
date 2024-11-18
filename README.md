@@ -120,7 +120,7 @@ Do the Following-
 
 There maybe additional dependencies you have to install as well.
 
-### Dataset and Pre-trained Models Download 
+### Download Datasets and Pre-trained Models  
  
 To download other datasets, please visit this link - https://huggingface.co/datasets/yangtaointernship/RealEstate10K-subset/tree/main
 
@@ -172,17 +172,25 @@ To download other datasets, please visit this link - https://huggingface.co/data
       nerfbaselines download-dataset external://mipnerf360/kitchen -o kitchen
 ```
 
-* Caption Generation Model 
+* Caption Generation Model. 
 
 ```bash
       git clone https://huggingface.co/Salesforce/blip2-opt-2.7b
-```     
+```
+If you want to use a smaller version, use this 
 
-* Stable Diffusion 3 Medium (Fast and Accurate)
+```bash
+      from transformers import BlipProcessor, BlipForConditionalGeneration
+      
+      processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+      model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+```
+
+* Stable Diffusion 3 Medium (Fast and Accurate). However, it does not support text-to-image editing yet. So, we use v1.5 which can be downloaded automatically (See the next step). 
 
 ```bash
       git clone https://huggingface.co/stabilityai/stable-diffusion-3-medium
-```        
+```
 
 * If you don't want to download the pre-trained model, generate an access token in hugging face (Go to your account settings) and login into your account 
 
