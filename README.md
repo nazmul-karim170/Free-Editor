@@ -12,6 +12,73 @@
 
 ## [Project page](https://free-editor.github.io/) | [Paper](https://arxiv.org/abs/2312.13663) 
 
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Grid</title>
+  <style>
+    .video-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    .video-item {
+        text-align: center;
+    }
+    .video-item video {
+        width: 100%;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+    }
+    .video-item figcaption {
+        margin-top: 10px;
+        font-size: 14px;
+        color: #666;
+    }
+    @media (max-width: 768px) {
+        .video-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="video-grid">
+    <div class="video-item">
+      <video controls>
+        <source src="assets/videos/video1.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Caption for Video 1</figcaption>
+    </div>
+    <div class="video-item">
+      <video controls>
+        <source src="assets/videos/video2.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Caption for Video 2</figcaption>
+    </div>
+    <div class="video-item">
+      <video controls>
+        <source src="assets/videos/video3.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Caption for Video 3</figcaption>
+    </div>
+    <div class="video-item">
+      <video controls>
+        <source src="assets/videos/video4.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Caption for Video 4</figcaption>
+    </div>
+  </div>
+</body>
+</html>
+
 
 <img src="assets/Top_teaser.png"/>
 
@@ -195,7 +262,7 @@ To download other datasets, please visit this link - https://huggingface.co/data
             python src/fedit/dataset_creation.py 
       ```
 
-### Free_editor Training
+### Free-Editor Training
 
       ```bash
             python train.py 
