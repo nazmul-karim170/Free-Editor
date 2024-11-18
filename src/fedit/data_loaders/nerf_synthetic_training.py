@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset
 import sys
 import json
+import pickle 
 
 sys.path.append("../")
 from .data_utils import rectify_inplane_rotation, get_nearest_pose_ids
@@ -78,9 +79,10 @@ class NerfSyntheticDataset(Dataset):
             self.scene_path = os.path.join(self.folder_path, scene)
             
             ## Load the Metadata containing 
-            with open(self.scene_path.joinpath(f"{scene}_edited_metadata.jsonl"), "r") as file:
-                self.scene_metadata = [json.loads(line) for line in file]
-            
+            ## Load the Metadata containing 
+            with open(self.scene_path.joinpath(f"{scene}_edited_metadata.pkl"), "rb") as file:
+                self.scene_metadata = pickle.load(file)
+
             self.metadata.extend(self.scene_metadata)
 
             # pose_file = os.path.join(self.scene_path, "transforms_{}.json".format(mode))
@@ -100,12 +102,12 @@ class NerfSyntheticDataset(Dataset):
         
         ## Load the starting and target view
         metadata = json.loads(self.metadata[idx])
-        starting_view  = imageio.imread(metadata["starting_view_file"]).astype(np.float32) / 255.0 
-        target_view  = imageio.imread(metadata["target_view_file"]).astype(np.float32) / 255.0
-        render_pose = metadata["render_pose"] 
-        target_camera = metadata["target_camera_matrices"]
-        start_camera = metadata["starting_camera_matrices"]
-        scene_name = metadata["scene_name"]
+        starting_view  = imageio.imread(os.path.join(self.folder_path,metadata["starting_view_file"])).astype(np.float32) / 255.0 
+        target_view    = imageio.imread(os.path.join(self.folder_path,metadata["target_view_file"])).astype(np.float32) / 255.0
+        render_pose    = metadata["render_pose"] 
+        target_camera  = metadata["target_camera_matrices"]
+        start_camera   = metadata["starting_camera_matrices"]
+        scene_name     = metadata["scene_name"]
         nearest_pose_ids = metadata["nearest_pose_ids"]          ## make sure to select at least (2*self.num_source_views) 
         nearest_pose_ids = np.random.choice(nearest_pose_ids, self.num_source_views, replace=False)
 
@@ -114,7 +116,6 @@ class NerfSyntheticDataset(Dataset):
         train_pose_file = os.path.join(scene_path, "transforms_train.json".format(self.mode))
         train_rgb_files, train_intrinsics, train_poses = read_cameras(train_pose_file)
   
-
         # if self.mode == "train":
         #     id_render = int(os.path.basename(rgb_file)[:-4].split("_")[1])
         #     subsample_factor = np.random.choice(np.arange(1, 4), p=[0.3, 0.5, 0.2])
@@ -146,6 +147,12 @@ class NerfSyntheticDataset(Dataset):
 
         src_rgbs = []
         src_cameras = []
+        
+        ## First one is the starting view
+        src_rgb.append(starting_view)
+        src_cameras.append(start_camera)
+
+        ## Rest is the source views
         for id in nearest_pose_ids:
             src_rgb = imageio.imread(train_rgb_files[id]).astype(np.float32) / 255.0
             src_rgb = src_rgb[..., [-1]] * src_rgb[..., :3] + 1 - src_rgb[..., [-1]]
@@ -170,12 +177,10 @@ class NerfSyntheticDataset(Dataset):
         depth_range = torch.tensor([near_depth, far_depth])
 
         return {
-            "start_rgb": torch.from_numpy(starting_view[..., :3]),
-            "taret_rgb": torch.from_numpy(target_view[..., :3]),
+            "rgb": torch.from_numpy(target_view[..., :3]),
             "camera": torch.from_numpy(target_camera),
-            "starting_camera": torch.from_numpy(start_camera),
-            "target_rgb_path": metadata["target_view_file"],
-            "src_rgbs": torch.from_numpy(src_rgbs[..., :3]),
+            "rgb_path": metadata["target_view_file"],
+            "src_rgbs": torch.from_numpy(src_rgbs[..., :3]), ## First one is the starting view
             "src_cameras": torch.from_numpy(src_cameras),
             "depth_range": depth_range,
         }

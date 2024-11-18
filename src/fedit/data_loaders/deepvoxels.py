@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset
 import glob
 import sys
+import pickle 
 
 sys.path.append("../")
 from .data_utils import deepvoxels_parse_intrinsics, get_nearest_pose_ids, rectify_inplane_rotation
@@ -18,51 +19,57 @@ class DeepVoxelsDataset(Dataset):
         self.subset = subset  # train / test / validation
         self.num_source_views = args.num_source_views
         self.testskip = args.testskip
-
         if isinstance(scenes, str):
             scenes = [scenes]
 
         self.scenes = scenes
-        self.all_rgb_files = []
-        self.all_depth_files = []
-        self.all_pose_files = []
-        self.all_intrinsics_files = []
+        self.scene_path_list_train = glob.glob(self.folder_path + "train") 
+        self.scene_path_list_test  =  glob.glob(self.folder_path + "test") 
+        self.scene_path_list_val   = glob.glob(self.folder_path + "validation")
 
+        self.scene_path_list = []
+        self.data_sets = []
         for scene in scenes:
-            self.scene_path = os.path.join(self.folder_path, subset, scene)
+            if str(scene) in self.scene_path_list_train:
+                self.scene_path =  os.path.join(args.scene_path_list_train, scene)
+                self.data_sets.append("train")
+            elif str(scene) in self.scene_path_list_test:
+                self.scene_path =  os.path.join(args.scene_path_list_test, scene)
+                self.data_sets.append("test")
+            else:
+                self.scene_path =  os.path.join(args.scene_path_list_val, scene)   
+                self.data_sets.append("val")             
 
-            rgb_files = [
-                os.path.join(self.scene_path, "rgb", f)
-                for f in sorted(os.listdir(os.path.join(self.scene_path, "rgb")))
-            ]
+            ## Load the Metadata containing 
+            with open(self.scene_path.joinpath(f"{scene}_edited_metadata.pkl"), "rb") as file:
+                self.scene_metadata = pickle.load(file)
             
-            if self.subset != "train":
-                rgb_files = rgb_files[:: self.testskip]
-
-            depth_files = [f.replace("rgb", "depth") for f in rgb_files]
-            pose_files  = [f.replace("rgb", "pose").replace("png", "txt") for f in rgb_files]
-            intrinsics_file = os.path.join(self.scene_path, "intrinsics.txt")
-            self.all_rgb_files.extend(rgb_files)
-            self.all_depth_files.extend(depth_files)
-            self.all_pose_files.extend(pose_files)
-            self.all_intrinsics_files.extend([intrinsics_file] * len(rgb_files))
+            self.metadata.extend(self.scene_metadata)
+            self.scene_path_list.append(self.scene_path)
 
     def __len__(self):
         return len(self.all_rgb_files)
 
     def __getitem__(self, idx):
-        idx = idx % len(self.all_rgb_files)
-        rgb_file = self.all_rgb_files[idx]
-        pose_file = self.all_pose_files[idx]
-        intrinsics_file = self.all_intrinsics_files[idx]
+        ## Load the starting and target view
+        scene_path = self.scene_path_list[idx]
+        data_set = self.data_sets[idx]
+        metadata = self.metadata[idx]
+        starting_view  = imageio.imread(os.path.join(self.folder_path, metadata["starting_view_file"])).astype(np.float32) / 255.0
+        rgb    = imageio.imread(os.path.join(self.folder_path, metadata["target_view_file"])).astype(np.float32) / 255.0
+        render_pose    = metadata["render_pose"] 
+        camera  = metadata["target_camera_matrices"]
+        start_camera   = metadata["starting_camera_matrices"]
+        scene     = metadata["scene_name"]                       ## Scene Path
+        nearest_pose_ids = metadata["nearest_pose_ids"]          ## make sure to select at least (2*self.num_source_views) 
+        depth_range = metadata["depth_range"]
+        nearest_pose_ids = np.random.choice(nearest_pose_ids, self.num_source_views, replace=False)
+
+        intrinsics_file = os.path.join(scene_path, "intrinsics.txt")
         intrinsics = deepvoxels_parse_intrinsics(intrinsics_file, 512)[0]
 
         train_rgb_files = sorted(
-            glob.glob(
-                os.path.join(
-                    self.scene_path.replace("/{}/".format(self.subset), "/train/"), "rgb", "*"
-                )
-            )
+            glob.glob(os.path.join(scene_path, "rgb", "*"))
         )
         train_poses_files = [
             f.replace("rgb", "pose").replace("png", "txt") for f in train_rgb_files
@@ -71,42 +78,10 @@ class DeepVoxelsDataset(Dataset):
             [np.loadtxt(file).reshape(4, 4) for file in train_poses_files], axis=0
         )
 
-        if self.subset == "train":
-            id_render = train_poses_files.index(pose_file)
-            subsample_factor = np.random.choice(np.arange(1, 5))
-            num_source_views = np.random.randint(
-                low=self.num_source_views - 4, high=self.num_source_views + 2
-            )
-        else:
-            id_render = -1
-            subsample_factor = 1
-            num_source_views = self.num_source_views
-
-        rgb = imageio.imread(rgb_file).astype(np.float32) / 255.0
-        render_pose = np.loadtxt(pose_file).reshape(4, 4)
-
-        img_size = rgb.shape[:2]
-        camera = np.concatenate(
-            (list(img_size), intrinsics.flatten(), render_pose.flatten())
-        ).astype(np.float32)
-
-        nearest_pose_ids = get_nearest_pose_ids(
-            render_pose,
-            train_poses,
-            min(num_source_views * subsample_factor, 40),
-            tar_id=id_render,
-            angular_dist_method="vector",
-        )
-        nearest_pose_ids = np.random.choice(nearest_pose_ids, num_source_views, replace=False)
-
-        assert id_render not in nearest_pose_ids
-
-        ## Occasionally include target image in the source views
-        if np.random.choice([0, 1], p=[0.995, 0.005]) and self.subset == "train":
-            nearest_pose_ids[np.random.choice(len(nearest_pose_ids))] = id_render
-
         src_rgbs = []
         src_cameras = []
+        src_rgb.append(starting_view)
+        src_cameras.append(start_camera)
         for id in nearest_pose_ids:
             src_rgb = imageio.imread(train_rgb_files[id]).astype(np.float32) / 255.0
             train_pose = train_poses[id]
@@ -123,21 +98,22 @@ class DeepVoxelsDataset(Dataset):
         src_rgbs = np.stack(src_rgbs, axis=0)
         src_cameras = np.stack(src_cameras, axis=0)
 
-        origin_depth = np.linalg.inv(render_pose.reshape(4, 4))[2, 3]
+        # origin_depth = np.linalg.inv(render_pose.reshape(4, 4))[2, 3]
+        # rgb_file = os.path.join(self.folder_path, metadata["target_view_file"])
 
-        if "cube" in rgb_file:
-            near_depth = origin_depth - 1.0
-            far_depth = origin_depth + 1
-        else:
-            near_depth = origin_depth - 0.8
-            far_depth = origin_depth + 0.8
+        # if "cube" in rgb_file:
+        #     near_depth = origin_depth - 1.0
+        #     far_depth = origin_depth + 1
+        # else:
+        #     near_depth = origin_depth - 0.8
+        #     far_depth = origin_depth + 0.8
 
-        depth_range = torch.tensor([near_depth, far_depth])
+        # depth_range = torch.tensor([near_depth, far_depth])
 
         return {
             "rgb": torch.from_numpy(rgb[..., :3]),
             "camera": torch.from_numpy(camera),
-            "rgb_path": rgb_file,
+            "rgb_path": os.path.join(self.folder_path, metadata["target_view_file"]),
             "src_rgbs": torch.from_numpy(src_rgbs[..., :3]),
             "src_cameras": torch.from_numpy(src_cameras),
             "depth_range": depth_range,

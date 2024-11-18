@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import Dataset
 import glob
 import cv2
-
+import pickle 
 
 class Camera(object):
     def __init__(self, entry):
@@ -44,74 +44,67 @@ class RealEstateDataset(Dataset):
         self.num_source_views = args.num_source_views
         self.target_h, self.target_w = 450, 800
         assert mode in ["train", "test"]
-        self.scene_path_list = glob.glob(os.path.join(self.folder_path, mode, "frames", "*"))
+        self.camera_path =  os.path.join(self.folder_path, "cameras")
+        self.frame_path = os.path.join(self.folder_path, 'frames')
+        train_scenes = [name for name in os.listdir(self.frame_path) if os.path.isdir(os.path.join(self.frame_path, name))]
 
-        all_rgb_files = []
-        all_timestamps = []
-        for i, scene_path in enumerate(self.scene_path_list):
-            rgb_files = [os.path.join(scene_path, f) for f in sorted(os.listdir(scene_path))]
-            if len(rgb_files) < 10:
-                print("omitting {}, too few images".format(os.path.basename(scene_path)))
-                continue
-            timestamps = [int(os.path.basename(rgb_file).split(".")[0]) for rgb_file in rgb_files]
-            sorted_ids = np.argsort(timestamps)
-            all_rgb_files.append(np.array(rgb_files)[sorted_ids])
-            all_timestamps.append(np.array(timestamps)[sorted_ids])
+        for scene in train_scenes:
+            self.scene_path =  os.path.join(self.frame_path, scene)
 
-        index = np.arange(len(all_rgb_files))
-        self.all_rgb_files = np.array(all_rgb_files)[index]
-        self.all_timestamps = np.array(all_timestamps)[index]
+            ## Load the Metadata containing 
+            with open(self.scene_path.joinpath(f"{scene}_edited_metadata.pkl"), "rb") as file:
+                self.scene_metadata = pickle.load(file)
+            
+            self.metadata.extend(self.scene_metadata)
 
     def __len__(self):
         return len(self.all_rgb_files)
 
     def __getitem__(self, idx):
-        rgb_files = self.all_rgb_files[idx]
-        timestamps = self.all_timestamps[idx]
+
+        ## Load the starting and target view
+        metadata = self.metadata[idx]
+        starting_view  = imageio.imread(os.path.join(self.folder_path, metadata["starting_view_file"]))
+        rgb    = imageio.imread(os.path.join(self.folder_path,metadata["target_view_file"]))
+        # render_pose    = metadata["render_pose"] 
+        camera  = metadata["target_camera_matrices"]
+        start_camera   = metadata["starting_camera_matrices"]
+        scene_name     = metadata["scene_name"]
+        id_feat = metadata["nearest_pose_ids"]          ## make sure to select at least (2*self.num_source_views) 
+        nearest_pose_ids = np.random.choice(nearest_pose_ids, self.num_source_views, replace=False)
+
+        scene_path =  os.path.join(self.folder_path, scene_name)
+        rgb_files = [os.path.join(scene_path, f) for f in sorted(os.listdir(scene_path))]
+        timestamps = [int(os.path.basename(rgb_file).split(".")[0]) for rgb_file in rgb_files]
+        sorted_ids = np.argsort(timestamps)
+        rgb_files = np.array(rgb_files)[sorted_ids]
+        timestamps = np.array(timestamps)[sorted_ids]
 
         assert (timestamps == sorted(timestamps)).all()
-        num_frames = len(rgb_files)
-        window_size = 32
-        shift = np.random.randint(low=-1, high=2)
-        id_render = np.random.randint(low=4, high=num_frames - 4 - 1)
+        # num_frames = len(rgb_files)
+        # window_size = 32
+        # shift = np.random.randint(low=-1, high=2)
+        # id_render = np.random.randint(low=4, high=num_frames - 4 - 1)
 
-        right_bound = min(id_render + window_size + shift, num_frames - 1)
-        left_bound = max(0, right_bound - 2 * window_size)
-        candidate_ids = np.arange(left_bound, right_bound)
-        # remove the query frame itself with high probability
-        if np.random.choice([0, 1], p=[0.01, 0.99]):
-            candidate_ids = candidate_ids[candidate_ids != id_render]
-
-        id_feat = np.random.choice(
-            candidate_ids, size=min(self.num_source_views, len(candidate_ids)), replace=False
-        )
-
-        rgb_file = rgb_files[id_render]
-        rgb = imageio.imread(rgb_files[id_render])
-        # resize the image to target size
+        ## resize the image to target size
         rgb = cv2.resize(rgb, dsize=(self.target_w, self.target_h), interpolation=cv2.INTER_AREA)
         rgb = rgb.astype(np.float32) / 255.0
 
-        camera_file = os.path.dirname(rgb_file).replace("frames", "cameras") + ".txt"
+        camera_file = os.path.join(self.camera_path, scene_name) + ".txt"
         cam_params = parse_pose_file(camera_file)
-        cam_param = cam_params[timestamps[id_render]]
-
-        img_size = rgb.shape[:2]
-        camera = np.concatenate(
-            (
-                list(img_size),
-                unnormalize_intrinsics(
-                    cam_param.intrinsics, self.target_h, self.target_w
-                ).flatten(),
-                cam_param.c2w_mat.flatten(),
-            )
-        ).astype(np.float32)
-
+        
         # get depth range
         depth_range = torch.tensor([1.0, 100.0])
 
         src_rgbs = []
         src_cameras = []
+
+        ## Starting View 
+        starting_view = cv2.resize(starting_view, dsize=(self.target_w, self.target_h), interpolation=cv2.INTER_AREA)
+        starting_view = starting_view.astype(np.float32) / 255.0
+        src_rgb.append(starting_view)
+        src_cameras.append(start_camera)
+
         for id in id_feat:
             src_rgb = imageio.imread(rgb_files[id])
             
@@ -141,8 +134,8 @@ class RealEstateDataset(Dataset):
         return {
             "rgb": torch.from_numpy(rgb),
             "camera": torch.from_numpy(camera),
-            "rgb_path": rgb_files[id_render],
-            "src_rgbs": torch.from_numpy(src_rgbs),
+            "rgb_path": os.path.join(self.folder_path,metadata["target_view_file"]),
+            "src_rgbs": torch.from_numpy(src_rgbs),      ## First one is the starting view
             "src_cameras": torch.from_numpy(src_cameras),
             "depth_range": depth_range,
         }

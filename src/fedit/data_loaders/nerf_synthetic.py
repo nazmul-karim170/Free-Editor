@@ -52,7 +52,7 @@ class NerfSyntheticDataset(Dataset):
         scenes=(),
         **kwargs
     ):
-        self.folder_path = os.path.join(args.rootdir, "data/nerf_synthetic/")
+        self.folder_path = os.path.join(args.rootdir, "../../../data/nerf_synthetic/")
         self.rectify_inplane_rotation = args.rectify_inplane_rotation
         if mode == "validation":
             mode = "val"

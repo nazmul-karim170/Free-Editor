@@ -4,25 +4,25 @@
 #SBATCH --job-name=exp
 
 ### Log Output
-#SBATCH --output=output-generate.txt
+#SBATCH --output=output-generate-1.txt
 
 ### Log Errors
-#SBATCH --error=error-generate.txt
+#SBATCH --error=error-generate-1.txt
 
 ### Partition
-#SBATCH --partition=defq
+#SBATCH --partition=permanent
 
 ### Number of Nodes:
 #SBATCH --nodes=1
 
 ### Number of Tasks (one for each GPU desired):
-#SBATCH --ntasks=1
+#SBATCH --ntasks=2
 
 ### Processors Per Task
 #SBATCH --cpus-per-task=24
 
 ### Number of GPUs  (which GPU)
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 
 ### Memory
 #SBATCH --mem=64G
@@ -38,4 +38,3 @@ conda activate nerfstudio
 
 ### Run Job Script
 python3 final_dataset_generation.py                       ## Pre-training
-# python3 train_classifier.py                             ## Fine-tuning on downstream task 

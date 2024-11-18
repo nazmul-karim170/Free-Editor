@@ -31,7 +31,7 @@ class Embedder(nn.Module):
                 out_dim += d
 
         self.embed_fns = embed_fns
-        self.out_dim = out_dim
+        self.out_dim   = out_dim
 
     def forward(self, inputs):
         return torch.cat([fn(inputs) for fn in self.embed_fns], -1)
@@ -51,7 +51,7 @@ class FeedForward(nn.Module):
         return x
 
 
-# Subtraction-based efficient attention
+## Subtraction-based efficient attention
 class Attention2D(nn.Module):
     def __init__(self, dim, dp_rate):
         super(Attention2D, self).__init__()
@@ -76,9 +76,6 @@ class Attention2D(nn.Module):
         k = self.k_fc(k)
         v = self.v_fc(k)
 
-        ## Create Duplicate of K and V
-
-
         pos = self.pos_fc(pos)
         attn = k - q[:, :, None, :] + pos  ## Why do we need to subtract it?
         attn = self.attn_fc(attn)
@@ -92,10 +89,77 @@ class Attention2D(nn.Module):
         return x
 
 
-# View Transformer
-class Transformer2D(nn.Module):
+## View Transformer
+class View_Transformer_Layer(nn.Module):
     def __init__(self, dim, ff_hid_dim, ff_dp_rate, attn_dp_rate):
-        super(Transformer2D, self).__init__()
+        super(View_Transformer_Layer, self).__init__()
+        self.attn_norm = nn.LayerNorm(dim, eps=1e-6)
+        self.ff_norm   = nn.LayerNorm(dim, eps=1e-6)
+
+        self.ff   = FeedForward(dim, ff_hid_dim, ff_dp_rate)
+        self.attn = Attention2D(dim, attn_dp_rate)
+
+    def forward(self, q, k, pos, mask=None):
+        residue = q
+        x = self.attn_norm(q)
+        x = self.attn(x, k, pos, mask)
+        x = x + residue
+
+        residue = x
+        x = self.ff_norm(x)
+        x = self.ff(x)
+        x = x + residue
+
+        return x
+
+## Subtraction-based efficient attention
+class CrossAttention(nn.Module):
+    def __init__(self, dim, dp_rate):
+        super(CrossAttention, self).__init__()
+        self.q_fc = nn.Linear(dim, dim, bias=False)
+        self.k_fc = nn.Linear(dim, dim, bias=False)
+        self.v_fc = nn.Linear(dim, dim, bias=False)
+        self.pos_fc = nn.Sequential(
+            nn.Linear(4, dim // 8),
+            nn.ReLU(),
+            nn.Linear(dim // 8, dim),
+        )
+        self.attn_fc = nn.Sequential(
+            nn.Linear(dim, dim // 8),
+            nn.ReLU(),
+            nn.Linear(dim // 8, dim),
+        )
+        self.out_fc = nn.Linear(dim, dim)
+        self.dp = nn.Dropout(dp_rate)
+
+    def forward(self, q, k, pos, mask=None):
+        q = self.q_fc(q)     ## check the dimensions 
+        k = self.k_fc(k)
+        v = self.v_fc(k)
+
+        ## Create "n_views" Duplicates of K and V
+        n_views = q.size(2)
+        k = k.repeat(n_views)
+        v = v.repeat(n_views)
+
+        ## Cal
+        pos  = self.pos_fc(pos)
+        attn = k - q[:, :, None, :] + pos  ## Why do we need to subtract it?
+        attn = self.attn_fc(attn)
+        if mask is not None:
+            attn = attn.masked_fill(mask == 0, -1e9)
+        attn = torch.softmax(attn, dim=-2)
+        attn = self.dp(attn)
+
+        x = ((v + pos) * attn).sum(dim=2)
+        x = self.dp(self.out_fc(x))
+        return x
+
+
+## EDIT Transformer
+class Edit_Transformer_Layer(nn.Module):
+    def __init__(self, dim, ff_hid_dim, ff_dp_rate, attn_dp_rate):
+        super(Edit_Transformer_Layer, self).__init__()
         self.attn_norm = nn.LayerNorm(dim, eps=1e-6)
         self.ff_norm = nn.LayerNorm(dim, eps=1e-6)
 
@@ -116,7 +180,8 @@ class Transformer2D(nn.Module):
         return x
 
 
-# attention module for self attention.
+
+# Attention module for self attention.
 # contains several adaptations to incorportate positional information (NOT IN PAPER)
 #   - qk (default) -> only (q.k) attention.
 #   - pos -> replace (q.k) attention with position attention.
@@ -178,12 +243,12 @@ class Attention(nn.Module):
             return out
 
 
-# Ray Transformer
-class Transformer(nn.Module):
+## Ray Transformer
+class Ray_Transformer_Layer(nn.Module):
     def __init__(
         self, dim, ff_hid_dim, ff_dp_rate, n_heads, attn_dp_rate, attn_mode="qk", pos_dim=None
     ):
-        super(Transformer, self).__init__()
+        super(Ray_Transformer_Layer, self).__init__()
         self.attn_norm = nn.LayerNorm(dim, eps=1e-6)
         self.ff_norm = nn.LayerNorm(dim, eps=1e-6)
 
@@ -209,9 +274,9 @@ class Transformer(nn.Module):
             return x
 
 
-class GNT(nn.Module):
+class FEDIT(nn.Module):
     def __init__(self, args, in_feat_ch=32, posenc_dim=3, viewenc_dim=3, ret_alpha=False):
-        super(GNT, self).__init__()
+        super(FEDIT, self).__init__()
         self.rgbfeat_fc = nn.Sequential(
             nn.Linear(in_feat_ch + 3, args.netwidth),
             nn.ReLU(),
@@ -224,18 +289,22 @@ class GNT(nn.Module):
         self.view_crosstrans = nn.ModuleList([])
         self.q_fcs = nn.ModuleList([])
         for i in range(args.trans_depth):
+            edit_trans_layers = []
             
-            ## edit transformer 
-            edit_trans = Transformer2D(
-                dim=args.netwidth,
-                ff_hid_dim=int(args.netwidth * 4),
-                ff_dp_rate=0.1,
-                attn_dp_rate=0.1,
-            )
-            self.edit_crosstrans.append(edit_trans)            
+            ## edit transformer (We can also use "Transformer" block)  
+            for i in range(args.edit_depth):
+                edit_trans = Edit_Transformer_Layer(
+                    dim=args.netwidth,
+                    ff_hid_dim=int(args.netwidth * 4),
+                    ff_dp_rate=0.1,
+                    attn_dp_rate=0.1,
+                )
+                edit_trans_layers.append(edit_trans)
+
+            self.edit_crosstrans.append(edit_trans_layers)            
 
             ## view transformer
-            view_trans = Transformer2D(
+            view_trans = View_Transformer_Layer(
                 dim=args.netwidth,
                 ff_hid_dim=int(args.netwidth * 4),
                 ff_dp_rate=0.1,
@@ -244,7 +313,7 @@ class GNT(nn.Module):
             self.view_crosstrans.append(view_trans)
             
             ## ray transformer
-            ray_trans = Transformer(
+            ray_trans = Ray_Transformer_Layer(
                 dim=args.netwidth,
                 ff_hid_dim=int(args.netwidth * 4),
                 n_heads=4,
@@ -288,7 +357,8 @@ class GNT(nn.Module):
         )
 
     def forward(self, rgb_feat, ray_diff, mask, pts, ray_d):
-        # compute positional embeddings
+        
+        ## Compute positional embeddings (To aggregate features along the epipolar line)
         viewdirs = ray_d
         viewdirs = viewdirs / torch.norm(viewdirs, dim=-1, keepdim=True)
         viewdirs = torch.reshape(viewdirs, [-1, 3]).float()
@@ -300,37 +370,42 @@ class GNT(nn.Module):
         embed = torch.cat([pts_, viewdirs_], dim=-1)
         input_pts, input_views = torch.split(embed, [self.posenc_dim, self.viewenc_dim], dim=-1)
 
-        # project rgb features to netwidth
-        rgb_feat = self.rgbfeat_fc(rgb_feat)  ## should be of size [:,N+1, :]
+        ## Project rgb features to netwidth
+        rgb_feat = self.rgbfeat_fc(rgb_feat)         ## should be of size  # [n_rays, n_samples, n_views+1, d+3]
 
         ## Key and Queries for Edit Transformer 
-        k_edit = rgb_feat[:,0,:]         # take the first one (depends on the starting views location in the batch)
-        q_edit = rgb_feat[:,1:,:]        # rest for source views
+        start_rgb_feat = rgb_feat[:,:,0,:]            # take the first one (depends on the starting views location in the batch)
+        q_edit = rgb_feat[:,:,1:,:]                   # rest for source views
 
         # q_init -> maxpool
         # q    = rgb_feat.max(dim=2)[0]
 
-        # transformer modules
+        # Transformer modules
         for i, (edit_trans, crosstrans, q_fc, selftrans) in enumerate(
             zip(self.edit_crosstrans, self.view_crosstrans, self.q_fcs, self.view_selftrans)
         ):
             
-            # edit transformer to tranfer edits from starting to source views 
-            q_edit = edit_trans(q_edit,k_edit,ray_diff, mask )              ## you need to understand what does (ray_diff, mask) do
+            ## Edit transformer to tranfer edits from starting to source views 
+            for edit_t  in edit_trans:
+                q_edit = edit_t(q_edit, start_rgb_feat, ray_diff, mask )              ## you need to understand what does (ray_diff, mask) do
             
-            # view transformer to update q
+            ## View transformer to update q
             q = q_edit.max(dim=2)[0]
             q = crosstrans(q, q_edit, ray_diff, mask)
-            # embed positional information
+            
+            ## Embed positional information
             if i % 2 == 0:
                 q = torch.cat((q, input_pts, input_views), dim=-1)
                 q = q_fc(q)
-            # ray transformer
+
+            ## Ray transformer
             q = selftrans(q, ret_attn=self.ret_alpha)
-            # 'learned' density
+            
+            ## 'learned' density
             if self.ret_alpha:
                 q, attn = q
-        # normalize & rgb
+        
+        ## normalize & rgb
         h = self.norm(q)
         outputs = self.rgb_fc(h.mean(dim=1))
         if self.ret_alpha:

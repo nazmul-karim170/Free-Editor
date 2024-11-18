@@ -1,7 +1,7 @@
 import torch
 import os
-from gnt.transformer_network import GNT
-from gnt.feature_network import ResUNet
+from fedit.transformer_network import FEDIT
+from fedit.feature_network import ResUNet
 
 
 def de_parallel(model):
@@ -13,13 +13,13 @@ def de_parallel(model):
 ########################################################################################################################
 
 
-class GNTModel(object):
+class FEDITModel(object):
     def __init__(self, args, load_opt=True, load_scheduler=True):
         self.args = args
         device = torch.device("cuda:{}".format(args.local_rank))
         
         ## create coarse GNT
-        self.net_coarse = GNT(
+        self.net_coarse = FEDIT(
             args,
             in_feat_ch=self.args.coarse_feat_dim,
             posenc_dim=3 + 3 * 2 * 10,
@@ -31,7 +31,7 @@ class GNTModel(object):
         if args.single_net:
             self.net_fine = None
         else:
-            self.net_fine = GNT(
+            self.net_fine = FEDIT(
                 args,
                 in_feat_ch=self.args.fine_feat_dim,
                 posenc_dim=3 + 3 * 2 * 10,
@@ -130,11 +130,15 @@ class GNTModel(object):
         if load_scheduler:
             self.scheduler.load_state_dict(to_load["scheduler"])
 
+        ## Load the pre-trained model 
+
+
         self.net_coarse.load_state_dict(to_load["net_coarse"])
         self.feature_net.load_state_dict(to_load["feature_net"])
 
         if self.net_fine is not None and "net_fine" in to_load.keys():
             self.net_fine.load_state_dict(to_load["net_fine"])
+
 
     def load_from_ckpt(
         self, out_folder, load_opt=True, load_scheduler=True, force_latest_ckpt=False
