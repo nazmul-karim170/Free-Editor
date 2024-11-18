@@ -191,15 +191,15 @@ To download other datasets, please visit this link - https://huggingface.co/data
 ``` 
 ### Free-Editor Dataset Generation
 
-      ```bash
-            python src/fedit/dataset_creation.py 
-      ```
+```bash
+      python src/fedit/dataset_creation.py 
+```
 
 ### Free-Editor Training
 
-      ```bash
-            python train.py 
-      ```
+```bash
+      python train.py 
+```
 
 ## 🚀 3D-Editing Results
 
