@@ -1,5 +1,3 @@
-# Under Construction!! the code will be available soon!
-
 <h2 align="center"> <a href="https://github.com/nazmul-karim170/FreeEditor-Text-to-3D-Scene-Editing">Free-Editor: Zero-shot Text-driven 3D Scene Editing</a></h2>
 <h5 align="center"> If you like our project, please give us a star ⭐ on GitHub for the latest update.  </h2>
 
@@ -51,72 +49,72 @@ Overview of our proposed method. We train a generalized NeRF (G(.)) that takes a
 
 Do the Following-
 
-    ```bash
-        conda create --name nerfstudio -y python=3.9
-        conda activate nerfstudio
-        python -m pip install --upgrade pip
-    ```
+```bash
+      conda create --name nerfstudio -y python=3.9
+      conda activate nerfstudio
+      python -m pip install --upgrade pip
+```
 
 ### Install dependencies
 
-    * If you have exisiting installation, first make sure to uninstall using this command:
+* If you have exisiting installation, first make sure to uninstall using this command:
 
-    ```bash
-        pip uninstall torch torchvision functorch tinycudann
-    ```
+```bash
+      pip uninstall torch torchvision functorch tinycudann
+```
 
-    * Then Install CUDA 11.8 with this command:
+* Then Install CUDA 11.8 with this command:
 
-    ```bash
-        conda install -c "nvidia/label/cuda-11.8.0" cuda-toolkit
-    ```
+```bash
+      conda install -c "nvidia/label/cuda-11.8.0" cuda-toolkit
+```
 
-    * Then install Pytorch 2.1.2 using this command:
+* Then install Pytorch 2.1.2 using this command:
 
-    ```bash
-        pip install torch==2.1.2+cu118 torchvision==0.16.2+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
-    ```
+```bash
+      pip install torch==2.1.2+cu118 torchvision==0.16.2+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
+```
 
-    * After pytorch and ninja, install the torch bindings for tiny-cuda-nn:
+* After pytorch and ninja, install the torch bindings for tiny-cuda-nn:
 
-    ```bash
-        pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
-    ```
+```bash
+      pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
+```
 
-    * Installing NerfStudio: Sometimes, you may face issue with configobj or other packages, manually install them from source. For example,
+* Installing NerfStudio: Sometimes, you may face issue with configobj or other packages, manually install them from source. For example,
 
-    ```bash
-        git clone https://github.com/DiffSK/configobj.git
-        cd configobj
-        python setup.py install
-    ```
+```bash
+      git clone https://github.com/DiffSK/configobj.git
+      cd configobj
+      python setup.py install
+```
 
-    * From pip (it does not work in cluster):
+* From pip (it does not work in cluster):
 
-    ```bash
-        pip install nerfstudio
-    ```
+```bash
+      pip install nerfstudio
+```
 
-    * If you want build from source and want the latest development version, use this command:
+* If you want build from source and want the latest development version, use this command:
 
-    ```bash
-        git clone https://github.com/nerfstudio-project/nerfstudio.git
-        cd nerfstudio
-        pip install --upgrade pip setuptools
-        pip install -e .
-    ```
+```bash
+      git clone https://github.com/nerfstudio-project/nerfstudio.git
+      cd nerfstudio
+      pip install --upgrade pip setuptools
+      pip install -e .
+```
 
-    * Download some test data: 
+* Download some test data: 
 
-    ```bash
-        ns-download-data nerfstudio --capture-name=poster           
-    ```
+```bash
+      ns-download-data nerfstudio --capture-name=poster           
+```
 
-    * Train model
+* Train model
 
-    ```bash
-        ns-train nerfacto --data data/nerfstudio/poster
-    ```
+```bash
+      ns-train nerfacto --data data/nerfstudio/poster
+```
 
     If you start seeing on your linux terminal that it started training, then it means everything is good to go!
 
@@ -126,78 +124,82 @@ There maybe additional dependencies you have to install as well.
  
 To download other datasets, please visit this link - https://huggingface.co/datasets/yangtaointernship/RealEstate10K-subset/tree/main
 
-      * Here, "synthetic_scenes.zip" is the deepvoxels data.
+* Here, "synthetic_scenes.zip" is the deepvoxels data.
 
-      * "nerf_synthetic" and blender dataset possibly the same dataset.
+* "nerf_synthetic" and blender dataset possibly the same dataset.
 
-      * "frames.zip" is the extracted frames for 200 scenes of RealEstate10K dataset. "train.zip" is the camera files. 
+* "frames.zip" is the extracted frames for 200 scenes of RealEstate10K dataset. "train.zip" is the camera files. 
 
-      * For Shiny Dataset, go to - https://nex-mpi.github.io/
+* For Shiny Dataset, go to - https://nex-mpi.github.io/
 
-      * For Spaces Dataset, 
+* For Spaces Dataset, 
 
-      ```bash
-            git clone https://github.com/augmentedperception/spaces_dataset
-      ```
+```bash
+      git clone https://github.com/augmentedperception/spaces_dataset
+```
 
-      * If you want to use "nerfbaselines", 
+* If you want to use "nerfbaselines", 
 
-        ```bash
-            conda deactivate 
-            conda create --name nerfbase 
-            conda activate nerfbase
-            pip install nerfbaselines
-        ```
+```bash
+      conda deactivate 
+      conda create --name nerfbase 
+      conda activate nerfbase
+      pip install nerfbaselines
+```
 
-      * Download Sample Datasets. For Example,
+* Download Sample Datasets. For Example,
 
-            * Downloads the garden scene to the cache folder.
+* Downloads the garden scene to the cache folder.
 
-                  ```bash
-                  mdkir data
-                  cd data
-                  mkdir nerf_dataset
-                  cd nerf_dataset
-                  
-                  nerfbaselines download-dataset external://mipnerf360/garden
-                  ```
+```bash
+      mdkir data
+      cd data
+      mkdir nerf_dataset
+      cd nerf_dataset
 
-            * Downloads all nerfstudio scenes to the cache
+      nerfbaselines download-dataset external://mipnerf360/garden
+```
 
-                  ```bash
-                  nerfbaselines download-dataset external://nerfstudio
-                  ```
+* Downloads all nerfstudio scenes to the cache
 
-            * Downloads kithen scene to folder kitchen
+```bash
+      nerfbaselines download-dataset external://nerfstudio
+```
 
-                  ```bash
-                  nerfbaselines download-dataset external://mipnerf360/kitchen -o kitchen
-                  ```
+* Downloads kithen scene to folder kitchen
 
-    * Caption Generation Model 
+```bash
+      nerfbaselines download-dataset external://mipnerf360/kitchen -o kitchen
+```
 
-        ```bash
-            git clone https://huggingface.co/Salesforce/blip2-opt-2.7b
-        ```     
+* Caption Generation Model 
 
-    * Stable Diffusion 3 Medium (Fast and Accurate)
+```bash
+      git clone https://huggingface.co/Salesforce/blip2-opt-2.7b
+```     
 
-        ```bash
-            git clone https://huggingface.co/stabilityai/stable-diffusion-3-medium
-        ```        
+* Stable Diffusion 3 Medium (Fast and Accurate)
 
-    * If you don't want to download the pre-trained model, generate an access token in hugging face (Go to your account settings) and login into your account 
+```bash
+      git clone https://huggingface.co/stabilityai/stable-diffusion-3-medium
+```        
 
-        ```bash
-            huggingface-cli login
-        ``` 
+* If you don't want to download the pre-trained model, generate an access token in hugging face (Go to your account settings) and login into your account 
+
+```bash
+      huggingface-cli login
+``` 
 ### Free-Editor Dataset Generation
 
       ```bash
             python src/fedit/dataset_creation.py 
       ```
 
+### Free_editor Training
 
+      ```bash
+            python train.py 
+      ```
 
 ## 🚀 3D-Editing Results
 
