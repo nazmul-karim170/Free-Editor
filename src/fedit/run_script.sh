@@ -31,8 +31,6 @@
 #SBATCH --time=24:00:00
 
 ### Load Modules as Needed
-export HTTPS_PROXY="http://StripDistrict:10132"
-module load shared cuda11.8/toolkit/11.8.0
 eval "$(conda shell.bash hook)"
 conda activate nerfstudio
 
