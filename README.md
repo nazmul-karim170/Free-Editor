@@ -118,7 +118,19 @@ Do the Following-
       ns-train nerfacto --data data/nerfstudio/poster
 ```
 
-    If you start seeing on your linux terminal that it started training, then it means everything is good to go!
+If you start seeing on your linux terminal that it started training, then it means everything is good to go! 
+
+*  Install ImageMagick as we need it for some datasets.
+
+```bash
+      cd ~
+      wget https://download.imagemagick.org/ImageMagick/download/ImageMagick.tar.gz
+      tar -xvzf ImageMagick.tar.gz
+      cd ImageMagick-*
+      ./configure --prefix=$HOME/imagemagick
+      make
+      make install
+```
 
 There maybe additional dependencies you have to install as well.
 
