@@ -1,5 +1,3 @@
-## This Repo is Under Construction! Thanks for the patience. Should be Completed by Nov 30, 2024 ##
-
 <h2 align="center"> <a href="https://github.com/nazmul-karim170/FreeEditor-Text-to-3D-Scene-Editing">Free-Editor: Zero-shot Text-driven 3D Scene Editing</a></h2>
 <h5 align="center"> If you like our project, please give us a star ⭐ on GitHub for the latest update.  </h2>
 
@@ -97,6 +95,7 @@ Do the Following-
       pip install nerfstudio
 ```
 
+
 * If you want build from source and want the latest development version, use this command:
 
 ```bash
@@ -151,6 +150,7 @@ To download other datasets, please visit this link - https://huggingface.co/data
 ```bash
       git clone https://github.com/augmentedperception/spaces_dataset
 ```
+
 
 * If you want to use "nerfbaselines", 
 
