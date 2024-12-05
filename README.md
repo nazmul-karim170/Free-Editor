@@ -1,3 +1,5 @@
+## This Repo is Under Construction! Thanks for the patience. Should be Completed by Nov 30, 2024 ##
+
 <h2 align="center"> <a href="https://github.com/nazmul-karim170/FreeEditor-Text-to-3D-Scene-Editing">Free-Editor: Zero-shot Text-driven 3D Scene Editing</a></h2>
 <h5 align="center"> If you like our project, please give us a star ⭐ on GitHub for the latest update.  </h2>
 
@@ -11,73 +13,6 @@
 </h5>
 
 ## [Project page](https://free-editor.github.io/) | [Paper](https://arxiv.org/abs/2312.13663) 
-
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Grid</title>
-  <style>
-    .video-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-        max-width: 1200px;
-        margin: 0 auto;
-    }
-    .video-item {
-        text-align: center;
-    }
-    .video-item video {
-        width: 100%;
-        border: 1px solid #ccc;
-        border-radius: 8px;
-    }
-    .video-item figcaption {
-        margin-top: 10px;
-        font-size: 14px;
-        color: #666;
-    }
-    @media (max-width: 768px) {
-        .video-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-  </style>
-</head>
-
-<body>
-  <div class="video-grid">
-    <div class="video-item">
-      <video controls>
-        <source src="assets/videos/video1.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-      <figcaption>Caption for Video 1</figcaption>
-    </div>
-    <div class="video-item">
-      <video controls>
-        <source src="assets/videos/video2.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-      <figcaption>Caption for Video 2</figcaption>
-    </div>
-    <div class="video-item">
-      <video controls>
-        <source src="assets/videos/video3.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-      <figcaption>Caption for Video 3</figcaption>
-    </div>
-    <div class="video-item">
-      <video controls>
-        <source src="assets/videos/video4.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-      <figcaption>Caption for Video 4</figcaption>
-    </div>
-  </div>
-</body>
-</html>
 
 
 <img src="assets/Top_teaser.png"/>
@@ -183,11 +118,23 @@ Do the Following-
       ns-train nerfacto --data data/nerfstudio/poster
 ```
 
-    If you start seeing on your linux terminal that it started training, then it means everything is good to go!
+If you start seeing on your linux terminal that it started training, then it means everything is good to go! 
+
+*  Install ImageMagick as we need it for some datasets.
+
+```bash
+      cd ~
+      wget https://download.imagemagick.org/ImageMagick/download/ImageMagick.tar.gz
+      tar -xvzf ImageMagick.tar.gz
+      cd ImageMagick-*
+      ./configure --prefix=$HOME/imagemagick
+      make
+      make install
+```
 
 There maybe additional dependencies you have to install as well.
 
-### Dataset and Pre-trained Models Download 
+### Download Datasets and Pre-trained Models  
  
 To download other datasets, please visit this link - https://huggingface.co/datasets/yangtaointernship/RealEstate10K-subset/tree/main
 
@@ -239,17 +186,25 @@ To download other datasets, please visit this link - https://huggingface.co/data
       nerfbaselines download-dataset external://mipnerf360/kitchen -o kitchen
 ```
 
-* Caption Generation Model 
+* Caption Generation Model. 
 
 ```bash
       git clone https://huggingface.co/Salesforce/blip2-opt-2.7b
-```     
+```
+If you want to use a smaller version, use this 
 
-* Stable Diffusion 3 Medium (Fast and Accurate)
+```bash
+      from transformers import BlipProcessor, BlipForConditionalGeneration
+      
+      processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+      model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+```
+
+* Stable Diffusion 3 Medium (Fast and Accurate). However, it does not support text-to-image editing yet. So, we use v1.5 which can be downloaded automatically (See the next step). 
 
 ```bash
       git clone https://huggingface.co/stabilityai/stable-diffusion-3-medium
-```        
+```
 
 * If you don't want to download the pre-trained model, generate an access token in hugging face (Go to your account settings) and login into your account 
 
@@ -258,15 +213,15 @@ To download other datasets, please visit this link - https://huggingface.co/data
 ``` 
 ### Free-Editor Dataset Generation
 
-      ```bash
-            python src/fedit/dataset_creation.py 
-      ```
+```bash
+      python src/fedit/dataset_creation.py 
+```
 
 ### Free-Editor Training
 
-      ```bash
-            python train.py 
-      ```
+```bash
+      python train.py 
+```
 
 ## 🚀 3D-Editing Results
 
