@@ -13,8 +13,8 @@ from .llff_data_utils import load_llff_data, batch_parse_llff_poses
 
 class IBRNetCollectedGenerationDataset(Dataset):
     def __init__(self, args, mode, scenes, random_crop=True, **kwargs):
-        self.folder_path1 = os.path.join(args.rootdir, "data/ibrnet_collected_1/")
-        self.folder_path2 = os.path.join(args.rootdir, "data/ibrnet_collected_2/")
+        self.folder_path1 = os.path.join(args.rootdir, "../../../data/ibrnet_collected_1/")
+        self.folder_path2 = os.path.join(args.rootdir, "../../../data/ibrnet_collected_2/")
         self.rectify_inplane_rotation = args.rectify_inplane_rotation
         self.mode = mode                 # train / test / validation
         self.num_source_views = args.num_source_views
@@ -164,7 +164,7 @@ class IBRNetCollectedGenerationDataset(Dataset):
         return {
             "caption_rgb": torch.from_numpy(caption_rgb[..., :3]),
             "traget_rgb": rgb[..., :3],
-            "traget_camera_matrices": camera,
+            "target_camera_matrices": camera,
             "starting_view": starting_rgb[..., :3],
             "starting_camera_matrices": starting_camera,
             "nearest_pose_ids": nearest_pose_ids,

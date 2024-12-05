@@ -13,7 +13,7 @@ from .data_utils import rectify_inplane_rotation, get_nearest_pose_ids
 # only for training
 class GoogleScannedDataset(Dataset):
     def __init__(self, args, mode, **kwargs):
-        self.folder_path = os.path.join(args.rootdir, "data/google_scanned_objects/")
+        self.folder_path = os.path.join(args.rootdir, "../../../data/google_scanned_objects/")
         self.num_source_views = args.num_source_views
         self.rectify_inplane_rotation = args.rectify_inplane_rotation
         self.scene_path_list = glob.glob(os.path.join(self.folder_path, "*"))
@@ -94,7 +94,7 @@ class GoogleScannedDataset(Dataset):
 
         src_rgbs = []
         src_cameras = []
-        src_rgb.append(starting_view)
+        src_rgbs.append(starting_view)
         src_cameras.append(start_camera)
         for id in id_feat:
             src_rgb = imageio.imread(rgb_files[id]).astype(np.float32) / 255.0

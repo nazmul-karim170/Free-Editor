@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset
 import sys
 import json
+import pickle 
 
 sys.path.append("../")
 from .data_utils import rectify_inplane_rotation, get_nearest_pose_ids
@@ -77,72 +78,80 @@ class NerfSyntheticDataset(Dataset):
         for scene in scenes:
             self.scene_path = os.path.join(self.folder_path, scene)
             
-            # ## Load the Metadata containing 
-            # with open(self.scene_path.joinpath(f"{scene}_edited_metadata.jsonl"), "r") as file:
-            #     self.scene_metadata = [json.loads(line) for line in file]
-            
-            # self.metadata.extend(self.scene_metadata)
+            ## Load the Metadata 
+            with open(self.scene_path.joinpath(f"{scene}_edited_metadata.pkl"), "rb") as file:
+                self.scene_metadata = pickle.load(file)
 
-            pose_file = os.path.join(self.scene_path, "transforms_{}.json".format(mode))
-            rgb_files, intrinsics, poses = read_cameras(pose_file)
-            if self.mode != "train":
-                rgb_files = rgb_files[:: self.testskip]
-                intrinsics = intrinsics[:: self.testskip]
-                poses = poses[:: self.testskip]
-            self.render_rgb_files.extend(rgb_files)
-            self.render_poses.extend(poses)
-            self.render_intrinsics.extend(intrinsics)
+            self.metadata.extend(self.scene_metadata)
+
+            # pose_file = os.path.join(self.scene_path, "transforms_{}.json".format(mode))
+            # rgb_files, intrinsics, poses = read_cameras(pose_file)
+            # if self.mode != "train":
+            #     rgb_files = rgb_files[:: self.testskip]
+            #     intrinsics = intrinsics[:: self.testskip]
+            #     poses = poses[:: self.testskip]
+            # self.render_rgb_files.extend(rgb_files)
+            # self.render_poses.extend(poses)
+            # self.render_intrinsics.extend(intrinsics)
 
     def __len__(self):
         return len(self.render_rgb_files)
 
     def __getitem__(self, idx):
         
-        # ## Load the starting and target view
-        # metadata = json.loads(self.metadata[idx])
-        # starting_view  = metadata["starting_view_file"]
-
-        # ## Based on the scene, get the tra
-        # pose_file = os.path.join(self.scene_path, "transforms_{}.json".format(self.mode))
-        # rgb_files, intrinsics, poses = read_cameras(pose_file)
-
-        rgb_file = self.render_rgb_files[idx]
-        render_pose = self.render_poses[idx]
-        render_intrinsics = self.render_intrinsics[idx]
-
-        train_pose_file = os.path.join("/".join(rgb_file.split("/")[:-2]), "transforms_train.json")
-        train_rgb_files, train_intrinsics, train_poses = read_cameras(train_pose_file)
-
-        if self.mode == "train":
-            id_render = int(os.path.basename(rgb_file)[:-4].split("_")[1])
-            subsample_factor = np.random.choice(np.arange(1, 4), p=[0.3, 0.5, 0.2])
-        else:
-            id_render = -1
-            subsample_factor = 1
-
-        rgb = imageio.imread(rgb_file).astype(np.float32) / 255.0
-        rgb = rgb[..., [-1]] * rgb[..., :3] + 1 - rgb[..., [-1]]
-        img_size = rgb.shape[:2]
-        camera = np.concatenate(
-            (list(img_size), render_intrinsics.flatten(), render_pose.flatten())
-        ).astype(np.float32)
-
-        nearest_pose_ids = get_nearest_pose_ids(
-            render_pose,
-            train_poses,
-            int(self.num_source_views * subsample_factor),
-            tar_id=id_render,
-            angular_dist_method="vector",
-        )
+        ## Load the starting and target view
+        metadata = self.metadata[idx]
+        starting_view  = imageio.imread(os.path.join(self.folder_path,metadata["starting_view_file"])).astype(np.float32) / 255.0 
+        target_view    = imageio.imread(os.path.join(self.folder_path,metadata["target_view_file"])).astype(np.float32) / 255.0
+        render_pose    = metadata["render_pose"] 
+        target_camera  = metadata["target_camera_matrices"]
+        start_camera   = metadata["starting_camera_matrices"]
+        scene_name     = metadata["scene_name"]
+        nearest_pose_ids = metadata["nearest_pose_ids"]          ## make sure to select at least (2*self.num_source_views) 
         nearest_pose_ids = np.random.choice(nearest_pose_ids, self.num_source_views, replace=False)
 
-        assert id_render not in nearest_pose_ids
-        # occasionally include input image
-        if np.random.choice([0, 1], p=[0.995, 0.005]) and self.mode == "train":
-            nearest_pose_ids[np.random.choice(len(nearest_pose_ids))] = id_render
+        ## Based on the scene, get the pose file
+        scene_path = os.path.join(self.folder_path, scene_name)
+        train_pose_file = os.path.join(scene_path, "transforms_train.json".format(self.mode))
+        train_rgb_files, train_intrinsics, train_poses = read_cameras(train_pose_file)
+  
+        # if self.mode == "train":
+        #     id_render = int(os.path.basename(rgb_file)[:-4].split("_")[1])
+        #     subsample_factor = np.random.choice(np.arange(1, 4), p=[0.3, 0.5, 0.2])
+        # else:
+        #     id_render = -1
+        #     subsample_factor = 1
+
+        # rgb = imageio.imread(rgb_file).astype(np.float32) / 255.0
+        # rgb = rgb[..., [-1]] * rgb[..., :3] + 1 - rgb[..., [-1]]
+        # img_size = rgb.shape[:2]
+        # camera = np.concatenate(
+        #     (list(img_size), render_intrinsics.flatten(), render_pose.flatten())
+        # ).astype(np.float32)
+
+        # nearest_pose_ids = get_nearest_pose_ids(
+        #     render_pose,
+        #     train_poses,
+        #     int(self.num_source_views * subsample_factor),
+        #     tar_id=id_render,
+        #     angular_dist_method="vector",
+        # )
+
+        # nearest_pose_ids = np.random.choice(nearest_pose_ids, self.num_source_views, replace=False)
+
+        # assert id_render not in nearest_pose_ids
+        # # occasionally include input image
+        # if np.random.choice([0, 1], p=[0.995, 0.005]) and self.mode == "train":
+        #     nearest_pose_ids[np.random.choice(len(nearest_pose_ids))] = id_render
 
         src_rgbs = []
         src_cameras = []
+        
+        ## First one is the starting view
+        src_rgb.append(starting_view)
+        src_cameras.append(start_camera)
+
+        ## Rest is the source views
         for id in nearest_pose_ids:
             src_rgb = imageio.imread(train_rgb_files[id]).astype(np.float32) / 255.0
             src_rgb = src_rgb[..., [-1]] * src_rgb[..., :3] + 1 - src_rgb[..., [-1]]
@@ -167,10 +176,10 @@ class NerfSyntheticDataset(Dataset):
         depth_range = torch.tensor([near_depth, far_depth])
 
         return {
-            "rgb": torch.from_numpy(rgb[..., :3]),
-            "camera": torch.from_numpy(camera),
-            "rgb_path": rgb_file,
-            "src_rgbs": torch.from_numpy(src_rgbs[..., :3]),
+            "rgb": torch.from_numpy(target_view[..., :3]),
+            "camera": torch.from_numpy(target_camera),
+            "rgb_path": metadata["target_view_file"],
+            "src_rgbs": torch.from_numpy(src_rgbs[..., :3]), ## First one is the starting view
             "src_cameras": torch.from_numpy(src_cameras),
             "depth_range": depth_range,
         }

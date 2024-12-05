@@ -13,7 +13,7 @@ from .data_utils import rectify_inplane_rotation, get_nearest_pose_ids
 # only for training
 class GoogleScannedGenerationDataset(Dataset):
     def __init__(self, args, mode, scenes, **kwargs):
-        self.folder_path = os.path.join(args.rootdir, "data/google_scanned_objects/")
+        self.folder_path = os.path.join(args.rootdir, "../../../data/google_scanned_objects/")
         self.num_source_views = args.num_source_views
         self.rectify_inplane_rotation = args.rectify_inplane_rotation
         # self.scene_path_list = glob.glob(os.path.join(self.folder_path, "*"))
@@ -119,12 +119,12 @@ class GoogleScannedGenerationDataset(Dataset):
         nearest_pose_ids = id_feat[1:]
 
         ## To generate the caption
-        caption_rgb = imageio.imread(self.all_rgb_files[0]).astype(np.float32) / 255.0
+        caption_rgb = imageio.imread(rgb_files[0]).astype(np.float32) / 255.0
 
         return {
             "caption_rgb": torch.from_numpy(caption_rgb[..., :3]),
             "traget_rgb": rgb[..., :3],
-            "traget_camera_matrices": camera,
+            "target_camera_matrices": camera,
             "starting_view": starting_rgb[..., :3],
             "starting_camera_matrices": starting_camera,
             "nearest_pose_ids": nearest_pose_ids,

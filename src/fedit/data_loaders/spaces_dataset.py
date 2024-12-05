@@ -361,7 +361,7 @@ class SpacesDataset(Dataset):
 
 class SpacesFreeDataset(Dataset):
     def __init__(self, args, mode, **kwargs):
-        self.folder_path = os.path.join(args.rootdir, "data/spaces_dataset/data/800/")
+        self.folder_path = os.path.join(args.rootdir, "../../../data/spaces/data/800/")
         self.mode = mode
         self.num_source_views = args.num_source_views
         self.random_crop = True
@@ -397,28 +397,28 @@ class SpacesFreeDataset(Dataset):
         return len(self.all_views_scenes)
 
     def __getitem__(self, idx):
-        all_views = self.all_views_scenes[idx]
-        num_rigs = len(all_views)
-        selected_rig_id = np.random.randint(low=0, high=num_rigs)  # select a rig position
-        rig_selected = all_views[selected_rig_id]
-        cam_id_selected = np.random.choice(16)
-        cam_selected = rig_selected[cam_id_selected]
-        render_camera, render_rgb = view_obj2camera_rgb(cam_selected)
-        all_c2w_mats = self.all_c2w_scenes[idx]
-        all_rgb_paths = self.all_rgb_paths_scenes[idx]
-        all_intrinsics = self.all_intrinsics_scenes[idx]
-        all_img_sizes = self.all_img_sizes_scenes[idx]
-        sorted_ids = sort_nearby_views_by_angle(
-            render_camera[-16:].reshape(4, 4), np.array(all_c2w_mats)
-        )
-        nearby_view_ids_selected = np.random.choice(
-            sorted_ids[1:], self.num_source_views, replace=False
-        )
+
+        metadata = self.metadata[idx]
+        starting_view  = imageio.imread(metadata["starting_view_file"]).astype(np.float32) / 255.0
+        rgb    = imageio.imread(metadata["target_view_file"]).astype(np.float32) / 255.0
+        render_pose    = metadata["render_pose"] 
+        camera  = metadata["target_camera_matrices"]
+        start_camera   = metadata["starting_camera_matrices"]
+        scene     = metadata["scene_name"]                       ## Scene Path
+        nearest_pose_ids = metadata["nearest_pose_ids"]          ## make sure to select at least (2*self.num_source_views) 
+        depth_range = metadata["depth_range"]
+        nearest_pose_ids = np.random.choice(nearest_pose_ids, self.num_source_views, replace=False)
+
+        views = ReadScene(scene)
+        self.all_views_scenes.append(views)
+        all_rgb_paths, all_img_sizes, all_intrinsics, all_c2w_mats = get_all_views_in_scene_cam_path(views)
 
         ref_cameras = []
         ref_rgbs = []
+        ref_rgbs.append(starting_view)
+        ref_cameras.append(start_camera)
         w_max, h_max = 0, 0
-        for id in nearby_view_ids_selected:
+        for id in nearest_pose_ids:
             rgb_path = all_rgb_paths[id]
             ref_rgb = imageio.imread(rgb_path).astype(np.float32) / 255.0
             h_in_view, w_in_view = all_img_sizes[id]
@@ -449,24 +449,11 @@ class SpacesFreeDataset(Dataset):
             ref_cameras[i][1] = w_max
 
         ref_cameras = np.array(ref_cameras)
-        if self.mode == "train" and self.random_crop:
-            render_rgb, render_camera, ref_rgbs_np, ref_cameras = random_crop(
-                render_rgb, render_camera, ref_rgbs_np, ref_cameras
-            )
-
-        if self.mode == "train" and np.random.choice([0, 1]):
-            render_rgb, render_camera, ref_rgbs_np, ref_cameras = random_flip(
-                render_rgb, render_camera, ref_rgbs_np, ref_cameras
-            )
-
-        near_depth = 0.7
-        far_depth = 100
-        depth_range = torch.tensor([near_depth, far_depth])
 
         return {
-            "rgb": torch.from_numpy(render_rgb).float(),
-            "camera": torch.from_numpy(render_camera).float(),
-            "rgb_path": cam_selected.image_path,
+            "rgb": torch.from_numpy(rgb).float(),
+            "camera": torch.from_numpy(camera).float(),
+            "rgb_path": metadata["starting_view_file"],
             "src_rgbs": torch.from_numpy(ref_rgbs_np).float(),
             "src_cameras": torch.from_numpy(np.stack(ref_cameras, axis=0)).float(),
             "depth_range": depth_range,

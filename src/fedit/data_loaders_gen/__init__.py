@@ -9,12 +9,12 @@ from .spaces_dataset_generation import *
 
 
 dataset_dict = {
-    "nerf_synthetic_generation": NerfSynthGenerationDataset,
-    "spaces_generation": SpacesFreeGenerationDataset,
-    "google_scanned_object_generation": GoogleScannedGenerationDataset,
-    "realestate_generation": RealEstateGenerationDataset,
-    "deepvoxels_generation": DeepVoxelsGenerationDataset,
-    "real_iconic_noface_geneartion": LLFFGenerationDataset,
-    "ibrnet_collected_generation": IBRNetCollectedGenerationDataset,
-    "shiny_generation": ShinyGenerationDataset,
+    "nerf_synthetic": NerfSynthGenerationDataset,
+    "spaces": SpacesFreeGenerationDataset,
+    "google_scanned_objects": GoogleScannedGenerationDataset,
+    "realestate10k": RealEstateGenerationDataset,
+    "deepvoxels": DeepVoxelsGenerationDataset,
+    "real_iconic_noface": LLFFGenerationDataset,
+    "ibrnet_collected": IBRNetCollectedGenerationDataset,
+    "shiny": ShinyGenerationDataset,
 }

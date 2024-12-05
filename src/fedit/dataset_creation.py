@@ -24,14 +24,12 @@ import glob
 
 # from ldm.modules.attention import CrossAttention
 # from ldm.util import instantiate_from_config
-from data_loaders.metrics.clip_similarity import ClipSimilarity
+from data_loaders_gen.metrics.clip_similarity import ClipSimilarity
 from PIL import Image
 from transformers import BlipProcessor, BlipForConditionalGeneration
 from diffusers import DiffusionPipeline, StableDiffusionPipeline, StableDiffusionImg2ImgPipeline, StableDiffusion3Pipeline, StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler, UniPCMultistepScheduler
-from data_loaders import dataset_dict         # from create_training_dataset import create_training_dataset
+from data_loaders_gen import dataset_dict         # from create_training_dataset import create_training_dataset
 import config_data_generation
-from GPT_4o import generate_prompts_gpt
-
 
 ################################################################################
 # Modified K-diffusion Euler ancestral sampler with prompt-to-prompt.
@@ -58,7 +56,7 @@ def to_d(x, sigma, denoised):
 def initialize_stable_diffusion(model_name="stable_diffusion/stable-diffusion-3-medium", device='cuda'):
     
     ## Load the Stable Diffusion pipeline  
-    # pipe = StableDiffusion3Pipeline.from_pretrained("stabilityai/stable-diffusion-3-medium-diffusers", torch_dtype=torch.float16)  ## It does not support text-to-image editing yet
+    # pipe = StableDiffusion3Pipeline.from_pretrained("stabilityai/stable-diffusion-3-medium-diffusers", torch_dtype=torch.float16)         ## It does not support text-to-image editing yet
     pipe = DiffusionPipeline.from_pretrained("stable-diffusion-v1-5/stable-diffusion-v1-5", custom_pipeline="stable_diffusion_mega", torch_dtype=torch.float16, variant="fp16")
 
     ## Use the UniPC Scheduler for Faster Inference (optional)
@@ -129,7 +127,19 @@ def main():
     parser.add_argument(
         "--n-samples",
         type=int,
-        default=10,
+        default=1,       ## Ideally, it should be 10-15
+        help="Number of samples to generate per prompt (before CLIP filtering).",
+    )
+    parser.add_argument(
+        "--num-edits",
+        type=int,
+        default=1,       ## ideally, it should be 15-20
+        help="Number of DDIM sampling steps.",
+    )
+    parser.add_argument(
+        "--num-startview",
+        type=int,
+        default=1,       ## Ideally, it should be 20-25
         help="Number of samples to generate per prompt (before CLIP filtering).",
     )
     parser.add_argument(
@@ -177,7 +187,7 @@ def main():
     parser.add_argument(
         "--clip-img-threshold",
         type=float,
-        default=0.5,
+        default=0.4,
         help="CLIP threshold for image-image similarity.",
     )
     opt = parser.parse_args()
@@ -206,71 +216,88 @@ def main():
     ## List All the Dataset Classes and Go through all of them one by one 
     parser = config_data_generation.config_parser()
     args = parser.parse_args()
-    train_datasets = ['nerf_synth_generation','nerf_synthetic', 'llff', 'spaces', 'ibrnet_collected', 'realestate', 'google_scanned', 'deepvoxels']
-
-            ### Generate the Editing Prompts (Update these) ###
+    train_datasets = ['nerf_synthetic', 'real_iconic_noface',  'shiny', 'spaces', 'ibrnet_collected', 'realestate10k', 'google_scanned_objects', 'deepvoxels']
+         
+            ### Sample Editing Styles ###
     painting_styles = ["Baroque",  "sci-fi style", "Realism","Impressionism","Op Art","Fauvism","Tonalism","Ashcan School","Rococo","Symbolism","Outsider Art"]
     painters_style  = ["Leonardo da Vinci", "Vincent van Gogh", "Sam Francis","Max Ernst", "Henri Matisse", "Eva Hesse", "Carl Andre", "Cy Twombly", "watercolor painting"]
-    color           = ["pink", "black-and-white color", "mix of rainbow", "red", "icy", "marble", "orange", " glossy metallic", "white","purple","green","blue", "silver", "gold", 'bronze']
-    
-    total_edits = 5
-    number_of_edits = 20 
-    
-    # Each dataset is different and we may need to go through them manually
+    color           = ["pink", "Cartoonish", "Watercolor", "black-and-white color", "mix of rainbow", "red", "icy", "marble", "orange", " glossy metallic", "white","purple","green","blue", "silver", "gold", 'bronze']
+
+    ## Total number of edits per view 
+    number_of_edits   = opt.num_edits 
+
+    ### Go through only 15 views, not all images of a scene
+    num_starting_view = opt.num_startview    
+
+    ## Each dataset is different and we may need to go through them manually
     for dataset in train_datasets:
-        
-        dataset = 'nerf_synthetic'  ## For Testing 
 
         ## Dataset Directory
         relative_data_path = "../../../data"        ## Change it according to your directories
         dataset_dir = os.path.join(relative_data_path, dataset)
+        print("We are Processing the Dataset: ", dataset)
         
-        if dataset == 'nerf_synthetic' or "nerf_synthetic_generation":
+        if dataset == 'nerf_synthetic':
             train_scenes = ["chair", "drums", "lego", "hotdog", "materials", "mic", "ship"]
-        elif dataset == 'realestate':
-            folder_path = os.path.join(dataset_dir, 'frames')
-            train_scenes = [name for name in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, name))]
+        elif dataset == 'realestate10k':
+            dataset_dir = os.path.join(dataset_dir, 'frames')
+            train_scenes = [name for name in os.listdir(dataset_dir) if os.path.isdir(os.path.join(dataset_dir, name))]
         elif dataset == 'ibrnet_collected':
             folder_path_1 = os.path.join(dataset_dir, 'ibrnet_collected_1')
+            train_scenes  = os.listdir(folder_path_1)
+            train_scenes_1 =  [os.path.join(folder_path_1, name) for name in train_scenes if os.path.isdir(os.path.join(folder_path_1, name))]  
             folder_path_2 = os.path.join(dataset_dir, 'ibrnet_collected_2')
-            train_scenes  = glob.glob(folder_path_1 + "*") + glob.glob(folder_path_2 + "*")
+            train_scenes  = os.listdir(folder_path_2)
+            train_scenes_2 =  [os.path.join(folder_path_2, name) for name in train_scenes if os.path.isdir(os.path.join(folder_path_1, name))]  
+            train_scenes = train_scenes_1 + train_scenes_2
         elif dataset == 'deepvoxels':
             modes = ['train', 'test', 'validation']
             train_scenes = []
             modes_list = []
             for mode in modes:
                 folder_path  = os.path.join(dataset_dir, mode)
-                train_scenes_1 = [name for name in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, name))]
+                train_scenes_1 =  [os.path.join(folder_path, name) for name in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, name))]  
                 train_scenes.extend(train_scenes_1)   
                 modes_list.extend([mode]*len(train_scenes_1))    
 
-        elif dataset == "real_iconic_noface" or "google_scanned_objects" or "shiny" or "spaces":
-            folder_path  = dataset_dir
-            train_scenes = [name for name in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, name))]            
+        elif dataset == 'spaces':
+            dataset_dir  =  os.path.join(dataset_dir, 'data/800')
+            train_scenes =  [os.path.join(dataset_dir, name) for name in os.listdir(dataset_dir) if os.path.isdir(os.path.join(dataset_dir, name))]  
+
+        elif dataset in ["real_iconic_noface","google_scanned_objects","shiny"]:
+            train_scenes = [name for name in os.listdir(dataset_dir) if os.path.isdir(os.path.join(dataset_dir, name))]            
+
 
         ## Go Scene-by-Scene
         for i, scene in enumerate(train_scenes):            
-            
-            ## Scene Directory
-            scene_edit_dir = Path(scene + "_edited")
-            os.makedirs(scene_edit_dir, exist_ok=True)
+            print("Processing the Scene: ", scene)
 
-            ## Edited Directory (Relative)
-            if dataset == 'ibrnet_collected':
-                save_dir_target = scene_edit_dir 
+            if i > 0:
+                break 
+
+            ## Edited Data Saving Directory (Relative)
+            if dataset in ['ibrnet_collected', 'spaces', 'deepvoxels']:
+                scene_name = scene.split("/")[-1]
+                scene_edited_name = scene_name + "_edited"
+                scene_edited_path = Path(scene_edited_name)
+                scene_dir = Path(scene)                     ## Meta data saving directory
+                save_dir_target = Path(scene + "_edited")   ## Edited Images Save directory
             else:
-                scene_dir_in  = os.path.join(dataset_dir, scene)
-                save_dir_target   = Path(scene_dir_in + "_edited")
-                os.makedirs(save_dir_target, exist_ok=True)
+                scene_edited_name = scene + "_edited"
+                scene_edited_path = Path(scene_edited_name)
+                scene_dir_in      = os.path.join(dataset_dir, scene)
+                scene_dir = Path(scene_dir_in)              ## Meta data saving directory
+                save_dir_target = Path(scene_dir_in + "_edited")
+
+            os.makedirs(save_dir_target, exist_ok=True)
 
             ## Get the Dataloader (We have to go through scene by scene)
-            dataset_tag   = dataset + "_generation"
             if dataset == 'deepvoxels':
                 mode = modes_list[i]
             else:
                 mode = 'train' 
                 
-            train_dataset = dataset_dict[dataset_tag](args, mode, scenes=scene)
+            train_dataset = dataset_dict[dataset](args, mode, scenes=scene)
 
             train_loader = torch.utils.data.DataLoader(
                 train_dataset,
@@ -283,8 +310,6 @@ def main():
             ## We will apply multiple edits to each scene
             for index_ed in range(number_of_edits):
 
-                ### Go through only 15 views, not all images of a scene
-                num_starting_view = 15
                 for b_id, batch in enumerate(train_loader):
 
                     ## BLIP Captioning Model
@@ -293,7 +318,7 @@ def main():
                         inputs = processor(caption_rgb, return_tensors="pt").to("cuda:0")                       ## Put the Image into GPU
                         out    = cap_model.generate(**inputs)                                                   ## Get the Prediction
                         # generated_cap = processor.batch_decode(out, skip_special_tokens=True)[0].strip()      ## Generate the Caption
-                        generated_cap = processor.decode(out[0], skip_special_tokens=True)     ## Generate the Caption
+                        generated_cap = processor.decode(out[0], skip_special_tokens=True)                      ## Generate the Caption
                         print("generated caption:", generated_cap)
     
                     ## We formulate one editing prompt per scene
@@ -323,8 +348,8 @@ def main():
                     print("Generated Prompt:", editing_prompt)
                 
                     ## Get the starting and target views 
-                    starting_view = Image.fromarray(255*batch["starting_view"].squeeze().astype(np.uint8))
-                    target_view   = Image.fromarray(255*batch["traget_rgb"].squeeze().astype(np.uint8))
+                    starting_view = Image.fromarray(255*batch["starting_view"].numpy().squeeze().astype(np.uint8))
+                    target_view   = Image.fromarray(255*batch["traget_rgb"].numpy().squeeze().astype(np.uint8))
                     nearest_pose_ids  = batch["nearest_pose_ids"]
 
                     width, height = starting_view.size
@@ -357,7 +382,7 @@ def main():
                             clip_sim_0, clip_sim_1, clip_sim_dir_0, clip_sim_dir_1, clip_sim_image = clip_similarity(
                                 pil_to_torch(target_view_ed), pil_to_torch(starting_view_ed), [editing_prompt], [editing_prompt],  pil_to_torch(target_view), pil_to_torch(starting_view),[generated_cap]
                             )
-                            print(clip_sim_0[0].cpu().item(), clip_sim_1, clip_sim_dir_0, clip_sim_dir_1, clip_sim_image)
+                            # print(clip_sim_0[0].cpu().item(), clip_sim_1, clip_sim_dir_0, clip_sim_dir_1, clip_sim_image)
 
                             results[seed] = dict(
                                 image_0=starting_view_ed,
@@ -371,11 +396,11 @@ def main():
 
                             progress_bar.update()
 
-                    ## CLIP filter to get best samples for each prompt.
+                    ## CLIP-Score based filtering to get best samples for each prompt.
                     metadata = [
                         (np.mean([result["clip_sim_0"], result["clip_sim_1"]]), seed)
                         for seed, result in results.items()
-                        if result["clip_sim_image"] >= opt.clip_img_threshold   ## Fix this 
+                        if result["clip_sim_image"] >= opt.clip_img_threshold    
                         and result["clip_sim_dir"] >= opt.clip_dir_threshold
                         and result["clip_sim_0"] >= opt.clip_threshold
                         and result["clip_sim_1"] >= opt.clip_threshold
@@ -393,14 +418,11 @@ def main():
                             image_1.save(save_dir_target.joinpath(f"t_view{index_ed}_{b_id}_{seed}.jpg"), quality=100, subsampling=0)
 
                             ## Saving one edited pair info at a time
-                            starting_view_file  = scene_edit_dir.joinpath(f"s_view_{index_ed}_{b_id}_{seed}.jpg")
-                            target_view_file    = scene_edit_dir.joinpath(f"t_view_{index_ed}_{b_id}_{seed}.jpg")
+                            starting_view_file  = os.path.join(scene_edited_path,f"s_view_{index_ed}_{b_id}_{seed}.jpg")
+                            target_view_file    = os.path.join(scene_edited_path,f"t_view_{index_ed}_{b_id}_{seed}.jpg")
                             CLIP_text_image_sim = np.mean([clip_sim_0[0].cpu().item(),clip_sim_1[0].cpu().item()])
                             print("Edited Images Saved  ................", starting_view_file)
 
-                        ## If 15 images have been edited 
-                        if b_id == num_starting_view:
-                            break
                 
                         ## Save the metadata of each edited pair
                         Scene_info = dict(
@@ -410,19 +432,19 @@ def main():
                             starting_view_file = starting_view_file,
                             target_view_file = target_view_file,
                             nearest_pose_ids = nearest_pose_ids,              ## We need this to select the non-edited images from each scene
-                            render_pose = batch["render_pose"] if  batch["render_pose"] else None,
+                            render_pose = batch["render_pose"],
                             target_camera_matrices  = batch["target_camera_matrices"],   
                             starting_camera_matrices  = batch["starting_camera_matrices"],   
                             clip_text_to_img_similarity=CLIP_text_image_sim,  ## while training, we will prioritize edited samples based on this 
                         )
 
-                        ## Save the metadata
-                        scene_dir = Path(scene_dir_in)
-
-                        # Save the metadata using pickle
-                        with open(scene_dir.joinpath(f"{scene}_edited_metadata.pkl"), "ab") as fp:
+                        ## Save the metadata using pickle
+                        with open(scene_dir.joinpath(f"{scene_edited_name}_metadata.pkl"), "ab") as fp:
                             pickle.dump(dict(seed=seed, **Scene_info), fp)
 
+                    ## If "num_starting_view" images have been edited 
+                    if b_id == num_starting_view:
+                        break
 
                 # # Clear cache after using SD model (FOR GPU Resource Limitations)
                 # del SD_pipe

@@ -39,8 +39,8 @@ def parse_pose_file(file):
 # only for training
 class RealEstateDataset(Dataset):
     def __init__(self, args, mode, **kwargs):
-        self.folder_path = os.path.join(args.rootdir, "data/realestate10k/")
-        self.mode = mode  # train / test / validation
+        self.folder_path = os.path.join(args.rootdir, "../../../data/realestate10k/")
+        self.mode = mode                    ## train / test / validation
         self.num_source_views = args.num_source_views
         self.target_h, self.target_w = 450, 800
         assert mode in ["train", "test"]
@@ -70,7 +70,7 @@ class RealEstateDataset(Dataset):
         camera  = metadata["target_camera_matrices"]
         start_camera   = metadata["starting_camera_matrices"]
         scene_name     = metadata["scene_name"]
-        id_feat = metadata["nearest_pose_ids"]          ## make sure to select at least (2*self.num_source_views) 
+        nearest_pose_ids = metadata["nearest_pose_ids"]          ## make sure to select at least (2*self.num_source_views) 
         nearest_pose_ids = np.random.choice(nearest_pose_ids, self.num_source_views, replace=False)
 
         scene_path =  os.path.join(self.folder_path, scene_name)
@@ -102,7 +102,7 @@ class RealEstateDataset(Dataset):
         ## Starting View 
         starting_view = cv2.resize(starting_view, dsize=(self.target_w, self.target_h), interpolation=cv2.INTER_AREA)
         starting_view = starting_view.astype(np.float32) / 255.0
-        src_rgb.append(starting_view)
+        src_rgbs.append(starting_view)
         src_cameras.append(start_camera)
 
         for id in id_feat:

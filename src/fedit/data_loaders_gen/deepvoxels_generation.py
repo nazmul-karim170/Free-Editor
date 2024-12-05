@@ -13,7 +13,7 @@ from .data_utils import deepvoxels_parse_intrinsics, get_nearest_pose_ids, recti
 class DeepVoxelsGenerationDataset(Dataset):
     def __init__(self, args, subset, scenes="vase", **kwargs):  # string or list
 
-        self.folder_path = os.path.join(args.rootdir, "data/deepvoxels/")
+        self.folder_path = os.path.join(args.rootdir, "../../../data/deepvoxels/")
         self.rectify_inplane_rotation = args.rectify_inplane_rotation
         self.subset = subset  # train / test / validation
         self.num_source_views = args.num_source_views
@@ -147,7 +147,7 @@ class DeepVoxelsGenerationDataset(Dataset):
         return {
             "caption_rgb": torch.from_numpy(caption_rgb[..., :3]),
             "traget_rgb": rgb[..., :3],
-            "traget_camera_matrices": camera,
+            "target_camera_matrices": camera,
             "starting_view": starting_rgb[..., :3],
             "starting_camera_matrices": starting_camera,
             "nearest_pose_ids": nearest_pose_ids,

@@ -10,8 +10,8 @@ from .data_utils import random_crop, random_flip, get_nearest_pose_ids
 from .llff_data_utils import load_llff_data, batch_parse_llff_poses
 
 class LLFFGenerationDataset(Dataset):
-    def __init__(self, args, scenes, mode='train', **kwargs):
-        base_dir = os.path.join(args.rootdir, "data/real_iconic_noface/")
+    def __init__(self, args, mode, scenes, **kwargs):
+        base_dir = os.path.join(args.rootdir, "../../../data/real_iconic_noface")
         self.args = args
         self.mode = mode      ## train / test / validation
         self.num_source_views = args.num_source_views
@@ -158,7 +158,7 @@ class LLFFGenerationDataset(Dataset):
         return {
             "caption_rgb": torch.from_numpy(caption_rgb[..., :3]),
             "traget_rgb": rgb[..., :3],
-            "traget_camera_matrices": camera,
+            "target_camera_matrices": camera,
             "starting_view": starting_rgb[..., :3],
             "starting_camera_matrices": starting_camera,
             "nearest_pose_ids": nearest_pose_ids,

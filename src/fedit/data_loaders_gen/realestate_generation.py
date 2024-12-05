@@ -39,7 +39,7 @@ def parse_pose_file(file):
 # only for training
 class RealEstateGenerationDataset(Dataset):
     def __init__(self, args, mode, scenes, **kwargs):
-        self.folder_path = os.path.join(args.rootdir, "data/realestate10k/")
+        self.folder_path = os.path.join(args.rootdir, "../../../data/realestate10k/")
         # self.mode = mode  # train / test / validation
         self.num_source_views = args.num_source_views
         self.target_h, self.target_w = 450, 800
@@ -159,14 +159,14 @@ class RealEstateGenerationDataset(Dataset):
         return {
             "caption_rgb": torch.from_numpy(caption_rgb[..., :3]),
             "traget_rgb": rgb[..., :3],
-            "traget_camera_matrices": camera,
+            "target_camera_matrices": camera,
             "starting_view": starting_rgb[..., :3],
             "starting_camera_matrices": starting_camera,
             "nearest_pose_ids": nearest_pose_ids,
             # "target_rgb_path": rgb_file,
             "num_images_in_scene": len(self.all_rgb_files),
             # "train_pose_file": train_pose_file,
-            # "render_pose": render_pose,
+            "render_pose": 0,
             # "src_rgbs": src_rgbs[..., :3],
             # "src_cameras": src_cameras,
             "depth_range": depth_range,
