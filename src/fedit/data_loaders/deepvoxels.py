@@ -14,7 +14,7 @@ from .data_utils import deepvoxels_parse_intrinsics, get_nearest_pose_ids, recti
 class DeepVoxelsDataset(Dataset):
     def __init__(self, args, subset, scenes="vase", **kwargs):  # string or list
 
-        self.folder_path = os.path.join(args.rootdir, "data/deepvoxels/")
+        self.folder_path = os.path.join(args.rootdir, "../../../data/deepvoxels/")
         self.rectify_inplane_rotation = args.rectify_inplane_rotation
         self.subset = subset  # train / test / validation
         self.num_source_views = args.num_source_views
@@ -80,7 +80,7 @@ class DeepVoxelsDataset(Dataset):
 
         src_rgbs = []
         src_cameras = []
-        src_rgb.append(starting_view)
+        src_rgbs.append(starting_view)
         src_cameras.append(start_camera)
         for id in nearest_pose_ids:
             src_rgb = imageio.imread(train_rgb_files[id]).astype(np.float32) / 255.0

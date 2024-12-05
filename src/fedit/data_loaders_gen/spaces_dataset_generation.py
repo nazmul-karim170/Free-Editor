@@ -261,23 +261,25 @@ def WriteNpToImage(np_image, path):
 # only for training
 class SpacesGenerationDataset(Dataset):
     def __init__(self, args, mode, **kwargs):
-        self.folder_path = os.path.join(args.rootdir, "data/spaces_dataset/data/800/")
+        self.folder_path = os.path.join(args.rootdir, "../../../data/spaces/data/800/")
+        print(self.folder_path)
         self.num_source_views = args.num_source_views
         self.mode = mode
         assert mode in ["train", "test", "validation"]
-        eval_scene_ids = [0, 9, 10, 23, 24, 52, 56, 62, 63, 73]
-        train_scene_ids = [i for i in np.arange(0, 100) if i not in eval_scene_ids]
-        if mode == "train":
-            self.scene_dirs = [
-                os.path.join(self.folder_path, "scene_{:03d}".format(i)) for i in train_scene_ids
-            ]
-        else:
-            self.scene_dirs = [
-                os.path.join(self.folder_path, "scene_{:03d}".format(i)) for i in eval_scene_ids
-            ]
+        # eval_scene_ids = [0, 9, 10, 23, 24, 52, 56, 62, 63, 73]
+        train_scene_ids = [i for i in np.arange(0, 100)]
+
+        self.scene_dirs = [
+            os.path.join(self.folder_path, "scene_{:03d}".format(i)) for i in train_scene_ids
+        ]
+        # else:
+        #     self.scene_dirs = [
+        #         os.path.join(self.folder_path, "scene_{:03d}".format(i)) for i in eval_scene_ids
+        #     ]
 
         self.all_views_scenes = []
         for scene_dir in self.scene_dirs:
+            # print("Scene Dir:", scene_dir)
             views = ReadScene(scene_dir)
             self.all_views_scenes.append(views)
 
@@ -361,15 +363,14 @@ class SpacesGenerationDataset(Dataset):
 
 class SpacesFreeGenerationDataset(Dataset):
     def __init__(self, args, mode, scenes, **kwargs):
-        self.folder_path = os.path.join(args.rootdir, "data/spaces_dataset/data/800/")
+        self.folder_path = os.path.join(args.rootdir, "../../../data/spaces/data/800/")
         self.mode = mode
         self.num_source_views = args.num_source_views
-        self.random_crop = True
+        self.random_crop = False
         assert mode in ["train", "test", "validation"]
-        # eval_scene_ids = [0, 9, 10, 23, 24, 52, 56, 62, 63, 73]
         if isinstance(scenes, str):
             scenes = [scenes]
-        self.scene_dirs = [os.path.join(self.folder_path, scene) for scene in scenes]
+        self.scene_dirs = scenes
 
         self.all_views_scenes = []
         self.all_rgb_paths_scenes = []
@@ -465,14 +466,14 @@ class SpacesFreeGenerationDataset(Dataset):
         return {
             "caption_rgb": torch.from_numpy(render_rgb).float(),
             "traget_rgb": render_rgb,
-            "traget_camera_matrices": render_camera,
+            "target_camera_matrices": render_camera,
             "starting_view": starting_rgb[..., :3],
             "starting_camera_matrices": starting_camera,
             "nearest_pose_ids": nearest_pose_ids,
             # "target_rgb_path": rgb_file,
             # "num_images_in_scene": len(self.all_rgb_files),
             # "train_pose_file": train_pose_file,
-            # "render_pose": render_pose,
+            "render_pose": 0,
             # "src_rgbs": src_rgbs[..., :3],
             # "src_cameras": src_cameras,
             "depth_range": depth_range,

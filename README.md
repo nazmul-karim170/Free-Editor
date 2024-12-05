@@ -95,6 +95,7 @@ Do the Following-
       pip install nerfstudio
 ```
 
+
 * If you want build from source and want the latest development version, use this command:
 
 ```bash
@@ -149,6 +150,7 @@ To download other datasets, please visit this link - https://huggingface.co/data
 ```bash
       git clone https://github.com/augmentedperception/spaces_dataset
 ```
+
 
 * If you want to use "nerfbaselines", 
 

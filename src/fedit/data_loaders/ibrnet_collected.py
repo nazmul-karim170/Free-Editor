@@ -14,8 +14,8 @@ from .llff_data_utils import load_llff_data, batch_parse_llff_poses
 
 class IBRNetCollectedDataset(Dataset):
     def __init__(self, args, mode, random_crop=True, **kwargs):
-        self.folder_path1 = os.path.join(args.rootdir, "data/ibrnet_collected_1/")
-        self.folder_path2 = os.path.join(args.rootdir, "data/ibrnet_collected_2/")
+        self.folder_path1 = os.path.join(args.rootdir, "../../../data/ibrnet_collected_1/")
+        self.folder_path2 = os.path.join(args.rootdir, "../../../data/ibrnet_collected_2/")
         self.rectify_inplane_rotation = args.rectify_inplane_rotation
         self.mode = mode  # train / test / validation
         self.num_source_views = args.num_source_views
@@ -73,15 +73,12 @@ class IBRNetCollectedDataset(Dataset):
             i_render = i_test
 
         train_intrinsics = intrinsics[i_render]
-        mean_depth = np.mean(depth_range)
-        world_center = (render_pose.dot(np.array([[0, 0, mean_depth, 1]]).T)).flatten()[:3]
-
         train_rgb_files = np.array(rgb_files)[i_render].tolist()
         train_poses = c2w_mats[i_render]
 
         src_rgbs = []
         src_cameras = []
-        src_rgb.append(starting_view)
+        src_rgbs.append(starting_view)
         src_cameras.append(start_camera)
         for id in nearest_pose_ids:
             src_rgb = imageio.imread(train_rgb_files[id]).astype(np.float32) / 255.0
@@ -106,7 +103,7 @@ class IBRNetCollectedDataset(Dataset):
         if self.mode == "train" and np.random.choice([0, 1], p=[0.5, 0.5]):
             rgb, camera, src_rgbs, src_cameras = random_flip(rgb, camera, src_rgbs, src_cameras)
 
-        depth_range = torch.tensor([depth_range[0] * 0.9, depth_range[1] * 1.5])
+        # depth_range = torch.tensor([depth_range[0] * 0.9, depth_range[1] * 1.5])
 
         return {
             "rgb": torch.from_numpy(rgb[..., :3]),

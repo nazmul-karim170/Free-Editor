@@ -12,7 +12,7 @@ from .shiny_data_utils import load_llff_data, batch_parse_llff_poses
 
 class ShinyGenerationDataset(Dataset):
     def __init__(self, args, mode, scenes=(), random_crop=True, **kwargs):
-        self.folder_path = os.path.join(args.rootdir, "data/shiny/")
+        self.folder_path = os.path.join(args.rootdir, "../../../data/shiny/")
         self.args = args
         self.mode = mode  # train / test / validation
         self.num_source_views = args.num_source_views
@@ -58,14 +58,15 @@ class ShinyGenerationDataset(Dataset):
             rgb_files = [os.path.join(image_dir, f) for f in sorted(os.listdir(image_dir))]
             _, c2w_mats = batch_parse_llff_poses(poses)
 
-            intrinsics = np.array(
-                [
-                    [fx, 0, cx, 0],
-                    [0, fy, cy, 0],
-                    [0, 0, 1, 0],
-                    [0, 0, 0, 1],
-                ]
-            ).astype(np.float32)
+            intrinsics_data = [[fx, 0, cx, 0], [0, fy, cy, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+            # Flatten any numpy arrays to scalars
+            intrinsics_data_cleaned = [
+                [float(x) if isinstance(x, np.ndarray) else x for x in row]
+                for row in intrinsics_data
+            ]
+            # Convert to a numpy array
+            intrinsics = np.array(intrinsics_data_cleaned, dtype=np.float32)
+
             intrinsics = intrinsics[None, :, :].repeat(len(c2w_mats), axis=0)
             near_depth = np.min(bds)
             far_depth = np.max(bds)
@@ -198,7 +199,7 @@ class ShinyGenerationDataset(Dataset):
         return {
             "caption_rgb": torch.from_numpy(caption_rgb[..., :3]),
             "traget_rgb": rgb[..., :3],
-            "traget_camera_matrices": camera,
+            "target_camera_matrices": camera,
             "starting_view": starting_rgb[..., :3],
             "starting_camera_matrices": starting_camera,
             "nearest_pose_ids": nearest_pose_ids,
