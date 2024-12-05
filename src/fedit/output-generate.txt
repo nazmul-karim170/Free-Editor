@@ -1,4 +1,0 @@
-Global seed: 3627040480
-loading ['chair'] for train
-generated caption: a green and white chair with a floral pattern
-Generated Prompt: Eva Hesse painting of a green and white chair with a floral pattern
